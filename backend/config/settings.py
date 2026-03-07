@@ -3,11 +3,9 @@ import os
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-development-key-change-in-production')
+SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-!!replace-this-secret-key-before-deploying-to-production!!')
 DEBUG = bool(int(os.environ.get('DEBUG', 1)))
-# NOTE: The following settings are permissive for development only.
-# In production, restrict ALLOWED_HOSTS, SECRET_KEY, CORS, and permissions.
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1,backend').split(',')
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -78,8 +76,10 @@ USE_TZ = True
 STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# Development only: allow all origins. Restrict in production via CORS_ALLOWED_ORIGINS.
-CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOWED_ORIGINS = os.environ.get(
+    'CORS_ALLOWED_ORIGINS',
+    'http://localhost:3000,http://127.0.0.1:3000'
+).split(',')
 
 # Development only: open access. Add authentication/authorization for production.
 REST_FRAMEWORK = {

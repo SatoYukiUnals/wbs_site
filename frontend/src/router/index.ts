@@ -1,5 +1,8 @@
-// ルート定義
+// ルート定義（認証ガード付き）
 import { createRouter, createWebHistory } from 'vue-router'
+import { getToken } from '@/api'
+
+const PUBLIC_ROUTES = ['/login', '/register']
 
 const router = createRouter({
   history: createWebHistory(),
@@ -57,6 +60,13 @@ const router = createRouter({
     { path: '/templates/new', name: 'template-create', component: () => import('@/views/template/TemplateCreateView.vue') },
     { path: '/templates/:templateId/edit', name: 'template-edit', component: () => import('@/views/template/TemplateEditView.vue') },
   ],
+})
+
+// 未認証ユーザーをログイン画面へリダイレクトするナビゲーションガード
+router.beforeEach((to) => {
+  if (!PUBLIC_ROUTES.includes(to.path) && !getToken()) {
+    return { path: '/login' }
+  }
 })
 
 export default router

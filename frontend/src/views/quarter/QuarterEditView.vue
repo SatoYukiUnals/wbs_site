@@ -1,26 +1,30 @@
 <script setup lang="ts">
 // 03-01-02 クォーター編集画面
-import { reactive, ref } from 'vue'
+import { reactive, ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { mockQuarters } from '@/mocks/data'
+import { api } from '@/api'
 
 const route = useRoute()
 const router = useRouter()
 const projectId = route.params.projectId as string
 const quarterId = route.params.quarterId as string
 
-const quarter = mockQuarters.find(q => q.id === quarterId)
-const form = reactive({
-  title: quarter?.title ?? '',
-  start_date: quarter?.start_date ?? '',
-  end_date: quarter?.end_date ?? '',
-})
+const form = reactive({ title: '', start_date: '', end_date: '' })
 const errors = reactive({ title: '', end_date: '' })
-const isLoading = ref(false)
+const isLoading = ref(true)
 
-/**
- * バリデーション処理
- */
+onMounted(async () => {
+  const quarters = await api.quarters.list(projectId)
+  const quarter = quarters.find(q => q.id === quarterId)
+  if (quarter) {
+    form.title = quarter.title
+    form.start_date = quarter.start_date
+    form.end_date = quarter.end_date
+  }
+  isLoading.value = false
+})
+
+/** バリデーション処理 */
 const validate = (): boolean => {
   errors.title = form.title ? '' : 'クォーター名は必須です'
   if (form.start_date && form.end_date && form.end_date < form.start_date) {
@@ -31,20 +35,21 @@ const validate = (): boolean => {
   return !errors.title && !errors.end_date
 }
 
-/**
- * 保存ボタン押下時の処理
- */
+/** 保存ボタン押下時の処理 */
 const handleSubmit = async () => {
   if (!validate()) return
   isLoading.value = true
-  await new Promise(r => setTimeout(r, 400))
-  isLoading.value = false
-  router.push(`/projects/${projectId}/quarters`)
+  try {
+    await api.quarters.update(projectId, quarterId, form)
+    router.push(`/projects/${projectId}/quarters`)
+  } finally {
+    isLoading.value = false
+  }
 }
 </script>
 
 <template>
-  <div class="max-w-lg">
+  <div id="quarter_edit__container" class="max-w-lg">
     <div class="flex items-center gap-3 mb-6">
       <router-link :to="`/projects/${projectId}/quarters`" class="text-blue-600 hover:underline text-sm">
         ← クォーター管理
@@ -53,10 +58,11 @@ const handleSubmit = async () => {
     </div>
 
     <div class="bg-white rounded-lg shadow p-6">
-      <form @submit.prevent="handleSubmit" class="space-y-4">
+      <form id="quarter_edit__form" @submit.prevent="handleSubmit" class="space-y-4">
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">クォーター名 <span class="text-red-500">*</span></label>
+          <label for="quarter_edit__title_input" class="block text-sm font-medium text-gray-700 mb-1">クォーター名 <span class="text-red-500">*</span></label>
           <input
+            id="quarter_edit__title_input"
             v-model="form.title"
             type="text"
             class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -66,16 +72,18 @@ const handleSubmit = async () => {
 
         <div class="grid grid-cols-2 gap-4">
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">開始日</label>
+            <label for="quarter_edit__start_date_input" class="block text-sm font-medium text-gray-700 mb-1">開始日</label>
             <input
+              id="quarter_edit__start_date_input"
               v-model="form.start_date"
               type="date"
               class="w-full border border-gray-300 rounded px-3 py-2 text-sm"
             />
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">終了日</label>
+            <label for="quarter_edit__end_date_input" class="block text-sm font-medium text-gray-700 mb-1">終了日</label>
             <input
+              id="quarter_edit__end_date_input"
               v-model="form.end_date"
               type="date"
               class="w-full border border-gray-300 rounded px-3 py-2 text-sm"
@@ -86,6 +94,7 @@ const handleSubmit = async () => {
 
         <div class="flex gap-2 pt-2">
           <button
+            id="quarter_edit__save_btn"
             type="submit"
             class="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700 disabled:opacity-50"
             :disabled="isLoading"

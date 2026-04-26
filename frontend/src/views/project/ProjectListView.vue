@@ -1,19 +1,27 @@
 <script setup lang="ts">
 // 02-01-00 プロジェクト一覧
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
-import { mockProjects } from '@/mocks/data'
+import { api } from '@/api'
 import type { Project } from '@/types'
 
 const authStore = useAuthStore()
-const projects = ref<Project[]>([...mockProjects])
+const projects = ref<Project[]>([])
+const isLoading = ref(true)
 
-/** adminロール以上かどうか */
 const isAdmin = authStore.currentUser?.role === 'admin' || authStore.currentUser?.role === 'master'
+
+onMounted(async () => {
+  try {
+    projects.value = await api.projects.list()
+  } finally {
+    isLoading.value = false
+  }
+})
 </script>
 
 <template>
-  <div>
+  <div id="project_list__container">
     <div class="flex items-center justify-between mb-4">
       <h1 class="text-xl font-bold text-sky-900">プロジェクト一覧</h1>
       <router-link
@@ -25,14 +33,17 @@ const isAdmin = authStore.currentUser?.role === 'admin' || authStore.currentUser
       </router-link>
     </div>
 
-    <div v-if="projects.length === 0" class="text-gray-500 text-sm py-8 text-center">
+    <div v-if="isLoading" class="text-gray-400 text-sm py-8 text-center">読み込み中...</div>
+
+    <div v-else-if="projects.length === 0" class="text-gray-500 text-sm py-8 text-center">
       プロジェクトがありません
     </div>
 
-    <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+    <div v-else class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
       <div
         v-for="project in projects"
         :key="project.id"
+        :id="`project_list__card_${project.id}`"
         data-testid="project-card"
         class="bg-white rounded-lg shadow p-5 hover:shadow-md transition-shadow"
       >
@@ -60,11 +71,6 @@ const isAdmin = authStore.currentUser?.role === 'admin' || authStore.currentUser
             class="bg-blue-500 h-2 rounded-full transition-all"
             :style="{ width: `${project.progress}%` }"
           />
-        </div>
-
-        <div class="text-xs text-gray-500 flex justify-between">
-          <span>{{ project.start_date }}</span>
-          <span>{{ project.end_date }}</span>
         </div>
 
         <div v-if="isAdmin" class="flex gap-2 mt-3 pt-3 border-t">

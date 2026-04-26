@@ -40,7 +40,7 @@ const handleDelete = () => {
 </script>
 
 <template>
-  <div>
+  <div id="roadmap__container">
     <div class="flex items-center gap-3 mb-6">
       <router-link :to="`/projects/${projectId}`" class="text-blue-600 hover:underline text-sm">
         ← プロジェクト詳細
@@ -59,7 +59,7 @@ const handleDelete = () => {
 
     <!-- マトリクス表示（クォーター × アイテム） -->
     <div class="grid gap-6" :style="{ gridTemplateColumns: `repeat(${quarters.length}, minmax(200px, 1fr))` }">
-      <div v-for="quarter in quarters" :key="quarter.id">
+      <div v-for="quarter in quarters" :key="quarter.id" :id="`roadmap__quarter_${quarter.id}`">
         <!-- クォーターヘッダー -->
         <div class="bg-gray-700 text-white text-sm font-medium px-4 py-2 rounded-t mb-2">
           {{ quarter.title }}
@@ -71,6 +71,7 @@ const handleDelete = () => {
           <div
             v-for="item in itemsForQuarter(quarter.id)"
             :key="item.id"
+            :id="`roadmap__item_${item.id}`"
             data-testid="roadmap-item-card"
             :class="statusColor(item.status)"
             class="border rounded p-3"
@@ -113,15 +114,16 @@ const handleDelete = () => {
     <!-- 削除確認ダイアログ -->
     <div
       v-if="showDeleteDialog"
+      id="roadmap__delete_dialog"
       class="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50"
     >
       <div class="bg-white rounded-lg shadow-lg p-6 w-80">
         <p class="text-sky-900 mb-4">このアイテムを削除しますか？</p>
         <div class="flex justify-end gap-2">
-          <button class="px-4 py-2 text-sm border rounded hover:bg-gray-50" @click="showDeleteDialog = false">
+          <button id="roadmap__cancel_delete_btn" class="px-4 py-2 text-sm border rounded hover:bg-gray-50" @click="showDeleteDialog = false">
             キャンセル
           </button>
-          <button class="px-4 py-2 text-sm text-white bg-red-500 rounded hover:bg-red-600" @click="handleDelete">
+          <button id="roadmap__confirm_delete_btn" class="px-4 py-2 text-sm text-white bg-red-500 rounded hover:bg-red-600" @click="handleDelete">
             削除する
           </button>
         </div>

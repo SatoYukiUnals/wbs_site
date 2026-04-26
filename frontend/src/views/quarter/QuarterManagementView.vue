@@ -1,31 +1,34 @@
 <script setup lang="ts">
 // 03-01-00 クォーター管理画面
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { mockQuarters } from '@/mocks/data'
+import { api } from '@/api'
 import type { Quarter } from '@/types'
 
 const route = useRoute()
 const authStore = useAuthStore()
 const projectId = route.params.projectId as string
 
-const quarters = ref<Quarter[]>(mockQuarters.filter(q => q.project_id === projectId))
+const quarters = ref<Quarter[]>([])
 const isAdmin = authStore.currentUser?.role !== 'member'
 const showDeleteDialog = ref(false)
 const deleteTargetId = ref('')
 
-/**
- * 削除処理（MOCK）
- */
-const handleDelete = () => {
+onMounted(async () => {
+  quarters.value = await api.quarters.list(projectId)
+})
+
+/** 削除処理 */
+const handleDelete = async () => {
+  await api.quarters.delete(projectId, deleteTargetId.value)
   quarters.value = quarters.value.filter(q => q.id !== deleteTargetId.value)
   showDeleteDialog.value = false
 }
 </script>
 
 <template>
-  <div>
+  <div id="quarter_mgmt__container">
     <div class="flex items-center gap-3 mb-6">
       <router-link :to="`/projects/${projectId}`" class="text-blue-600 hover:underline text-sm">
         ← プロジェクト詳細
@@ -43,8 +46,8 @@ const handleDelete = () => {
     </div>
 
     <div class="bg-white rounded-lg shadow overflow-hidden">
-      <table class="w-full text-sm">
-        <thead class="bg-gray-50 border-b">
+      <table id="quarter_mgmt__table" class="w-full text-sm">
+        <thead id="quarter_mgmt__thead" class="bg-gray-50 border-b">
           <tr>
             <th class="text-left px-4 py-3 text-gray-600 font-medium">クォーター名</th>
             <th class="text-left px-4 py-3 text-gray-600 font-medium">開始日</th>
@@ -53,10 +56,11 @@ const handleDelete = () => {
             <th v-if="isAdmin" class="px-4 py-3"></th>
           </tr>
         </thead>
-        <tbody>
+        <tbody id="quarter_mgmt__tbody">
           <tr
             v-for="q in quarters"
             :key="q.id"
+            :id="`quarter_mgmt__row_${q.id}`"
             data-testid="quarter-row"
             class="border-b last:border-0 hover:bg-gray-50"
           >
@@ -79,6 +83,7 @@ const handleDelete = () => {
                 編集
               </router-link>
               <button
+                :id="`quarter_mgmt__delete_btn_${q.id}`"
                 class="text-red-500 hover:text-red-700 text-xs"
                 @click="deleteTargetId = q.id; showDeleteDialog = true"
               >
@@ -93,15 +98,16 @@ const handleDelete = () => {
     <!-- 削除確認ダイアログ -->
     <div
       v-if="showDeleteDialog"
+      id="quarter_mgmt__delete_dialog"
       class="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50"
     >
       <div class="bg-white rounded-lg shadow-lg p-6 w-80">
         <p class="text-sky-900 mb-4">このクォーターを削除しますか？</p>
         <div class="flex justify-end gap-2">
-          <button class="px-4 py-2 text-sm border rounded hover:bg-gray-50" @click="showDeleteDialog = false">
+          <button id="quarter_mgmt__cancel_delete_btn" class="px-4 py-2 text-sm border rounded hover:bg-gray-50" @click="showDeleteDialog = false">
             キャンセル
           </button>
-          <button class="px-4 py-2 text-sm text-white bg-red-500 rounded hover:bg-red-600" @click="handleDelete">
+          <button id="quarter_mgmt__confirm_delete_btn" class="px-4 py-2 text-sm text-white bg-red-500 rounded hover:bg-red-600" @click="handleDelete">
             削除する
           </button>
         </div>

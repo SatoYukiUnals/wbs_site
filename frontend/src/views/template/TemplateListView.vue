@@ -1,17 +1,21 @@
 <script setup lang="ts">
 // 11-01-00 テンプレート一覧画面
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
-import { mockTemplates } from '@/mocks/data'
+import { api } from '@/api'
 import type { Template, TemplateType } from '@/types'
 
 const authStore = useAuthStore()
 const isAdmin = authStore.currentUser?.role !== 'member'
 
-const templates = ref<Template[]>([...mockTemplates])
+const templates = ref<Template[]>([])
 const filterType = ref<TemplateType | ''>('')
 const showDeleteDialog = ref(false)
 const deleteTargetId = ref('')
+
+onMounted(async () => {
+  templates.value = await api.templates.list()
+})
 
 /** フィルター後の一覧 */
 const filteredTemplates = () =>
@@ -19,7 +23,8 @@ const filteredTemplates = () =>
     ? templates.value.filter(t => t.type === filterType.value)
     : templates.value
 
-const handleDelete = () => {
+const handleDelete = async () => {
+  await api.templates.delete(deleteTargetId.value)
   templates.value = templates.value.filter(t => t.id !== deleteTargetId.value)
   showDeleteDialog.value = false
 }
@@ -30,7 +35,7 @@ const typeLabel = (type: TemplateType): string =>
 </script>
 
 <template>
-  <div>
+  <div id="template_list__container">
     <div class="flex items-center justify-between mb-6">
       <h1 class="text-xl font-bold text-sky-900">テンプレート一覧</h1>
       <router-link
@@ -43,8 +48,9 @@ const typeLabel = (type: TemplateType): string =>
     </div>
 
     <!-- フィルター -->
-    <div class="flex items-center gap-3 mb-4">
+    <div id="template_list__filter_area" class="flex items-center gap-3 mb-4">
       <select
+        id="template_list__type_select"
         v-model="filterType"
         class="border border-gray-300 rounded px-3 py-1.5 text-sm"
       >
@@ -56,8 +62,8 @@ const typeLabel = (type: TemplateType): string =>
 
     <!-- テンプレート一覧テーブル -->
     <div class="bg-white rounded-lg shadow overflow-hidden">
-      <table class="w-full text-sm">
-        <thead class="bg-gray-50 border-b">
+      <table id="template_list__table" class="w-full text-sm">
+        <thead id="template_list__thead" class="bg-gray-50 border-b">
           <tr>
             <th class="text-left px-4 py-3 text-gray-600 font-medium">テンプレート名</th>
             <th class="text-left px-4 py-3 text-gray-600 font-medium">種別</th>
@@ -66,10 +72,11 @@ const typeLabel = (type: TemplateType): string =>
             <th v-if="isAdmin" class="px-4 py-3"></th>
           </tr>
         </thead>
-        <tbody>
+        <tbody id="template_list__tbody">
           <tr
             v-for="t in filteredTemplates()"
             :key="t.id"
+            :id="`template_list__row_${t.id}`"
             data-testid="template-row"
             class="border-b last:border-0 hover:bg-gray-50"
           >
@@ -87,6 +94,7 @@ const typeLabel = (type: TemplateType): string =>
                 編集
               </router-link>
               <button
+                :id="`template_list__delete_btn_${t.id}`"
                 class="text-red-500 hover:text-red-700 text-xs"
                 @click="deleteTargetId = t.id; showDeleteDialog = true"
               >
@@ -106,15 +114,16 @@ const typeLabel = (type: TemplateType): string =>
     <!-- 削除確認ダイアログ -->
     <div
       v-if="showDeleteDialog"
+      id="template_list__delete_dialog"
       class="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50"
     >
       <div class="bg-white rounded-lg shadow-lg p-6 w-80">
         <p class="text-sky-900 mb-4">このテンプレートを削除しますか？</p>
         <div class="flex justify-end gap-2">
-          <button class="px-4 py-2 text-sm border rounded hover:bg-gray-50" @click="showDeleteDialog = false">
+          <button id="template_list__cancel_delete_btn" class="px-4 py-2 text-sm border rounded hover:bg-gray-50" @click="showDeleteDialog = false">
             キャンセル
           </button>
-          <button class="px-4 py-2 text-sm text-white bg-red-500 rounded hover:bg-red-600" @click="handleDelete">
+          <button id="template_list__confirm_delete_btn" class="px-4 py-2 text-sm text-white bg-red-500 rounded hover:bg-red-600" @click="handleDelete">
             削除する
           </button>
         </div>

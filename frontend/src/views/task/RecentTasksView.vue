@@ -1,25 +1,26 @@
 <script setup lang="ts">
 // 04-XX 直近タスク一覧（期限切れ・今週開始予定・着手中の未完了タスク）
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
-import { mockTasks, mockMembers } from '@/mocks/data'
-import type { Task, TaskStatus } from '@/types'
+import { api } from '@/api'
+import type { Task, TaskStatus, ProjectMember } from '@/types'
 
 const route = useRoute()
 const projectId = route.params.projectId as string
 
-/** タスクをフラット化（全階層） */
-const flattenTasks = (tasks: Task[]): Task[] => {
-  const result: Task[] = []
-  for (const t of tasks) {
-    result.push(t)
-    if (t.children) result.push(...flattenTasks(t.children))
-  }
-  return result
-}
+/** バックエンドの recent エンドポイントから取得したタスク（フラット） */
+const allTasks = ref<Task[]>([])
 
-/** プロジェクト内の全タスク（フラット） */
-const allTasks = flattenTasks(mockTasks.filter(t => t.project_id === projectId))
+onMounted(async () => {
+  const result = await api.recent.get(projectId)
+  const members_resp = await api.projects.listMembers(projectId)
+  members.value = members_resp
+  allTasks.value = [
+    ...result.overdue,
+    ...result.starting_soon,
+    ...result.in_progress,
+  ]
+})
 
 /** 今日・1週間後 */
 const today = new Date()
@@ -71,7 +72,7 @@ const toggleCollapse = (reason: Reason) => {
 
 /** 抽出・フィルタ・ソート済みタスク */
 const recentTasks = computed<RecentTask[]>(() => {
-  return allTasks
+  return allTasks.value
     .filter(t => {
       const reason = getReason(t)
       if (!reason) return false
@@ -101,7 +102,7 @@ const groups: { reason: Reason; label: string; badgeClass: string }[] = [
   { reason: 'in_progress',   label: '着手中',        badgeClass: 'bg-blue-100 text-blue-700' },
 ]
 
-const members = mockMembers.filter(m => m.project_id === projectId)
+const members = ref<ProjectMember[]>([])
 
 const statusOptions: { value: TaskStatus | ''; label: string }[] = [
   { value: '', label: 'すべて' },
@@ -126,14 +127,15 @@ const formatDate = (d: string | null) => d ? d.replace(/-/g, '/') : '—'
 </script>
 
 <template>
-  <div>
+  <div id="recent_tasks__container">
     <h1 class="text-xl font-bold text-sky-900 mb-4">直近のタスク</h1>
 
     <!-- フィルタ -->
-    <div class="bg-white rounded-lg shadow px-4 py-3 mb-4 flex flex-wrap gap-4 items-end">
+    <div id="recent_tasks__filter_area" class="bg-white rounded-lg shadow px-4 py-3 mb-4 flex flex-wrap gap-4 items-end">
       <div>
         <label class="block text-xs text-sky-900 mb-1">ステータス</label>
         <select
+          id="recent_tasks__status_select"
           v-model="filterStatus"
           class="border border-gray-300 rounded px-2 py-1 text-sm text-sky-900"
         >
@@ -143,6 +145,7 @@ const formatDate = (d: string | null) => d ? d.replace(/-/g, '/') : '—'
       <div>
         <label class="block text-xs text-sky-900 mb-1">担当者</label>
         <select
+          id="recent_tasks__assignee_select"
           v-model="filterAssigneeId"
           class="border border-gray-300 rounded px-2 py-1 text-sm text-sky-900"
         >
@@ -160,6 +163,7 @@ const formatDate = (d: string | null) => d ? d.replace(/-/g, '/') : '—'
 
       <!-- グループヘッダー -->
       <button
+        :id="`recent_tasks__group_btn_${g.reason}`"
         class="w-full flex items-center gap-2 px-4 py-2 bg-white rounded-t-lg border border-gray-500 hover:bg-gray-50 transition-colors"
         @click="toggleCollapse(g.reason)"
       >
@@ -196,6 +200,7 @@ const formatDate = (d: string | null) => d ? d.replace(/-/g, '/') : '—'
             <tr
               v-for="{ task } in grouped[g.reason]"
               :key="task.id"
+              :id="`recent_tasks__row_${task.id}`"
               class="hover:bg-gray-50 transition-colors"
             >
               <td class="border-b border-r border-gray-500 px-3 py-2 text-xs text-sky-900 whitespace-nowrap">{{ task.wbs_no }}</td>

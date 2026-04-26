@@ -3,8 +3,8 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { mockTasks, mockMembers, mockQuarters } from '@/mocks/data'
-import type { Task, TaskStatus, TaskType } from '@/types'
+import { api } from '@/api'
+import type { Task, TaskStatus, ProjectMember, Quarter } from '@/types'
 
 const route = useRoute()
 const authStore = useAuthStore()
@@ -15,12 +15,27 @@ const isAdmin = authStore.currentUser?.role !== 'member'
 const filterStatus = ref<TaskStatus | ''>('')
 const filterAssignee = ref('')
 const filterQuarter = ref('')
-const members = mockMembers.filter(m => m.project_id === projectId)
-const quarters = mockQuarters.filter(q => q.project_id === projectId)
+const members = ref<ProjectMember[]>([])
+const quarters = ref<Quarter[]>([])
 
-const rootTasks = ref<Task[]>(
-  mockTasks.filter(t => t.project_id === projectId && t.parent_task_id === null)
-)
+const rootTasks = ref<Task[]>([])
+
+onMounted(async () => {
+  const [tasks, m, q] = await Promise.all([
+    api.tasks.list(projectId),
+    api.projects.listMembers(projectId),
+    api.quarters.list(projectId),
+  ])
+  rootTasks.value = tasks
+  members.value = m
+  quarters.value = q
+  expandedIds.value = new Set(allTaskIds())
+
+  // 今日の日付が含まれるクォーターを初期選択する
+  const today = new Date().toISOString().slice(0, 10)
+  const currentQuarter = q.find(qt => qt.start_date <= today && today <= qt.end_date)
+  if (currentQuarter) filterQuarter.value = currentQuarter.id
+})
 
 const filteredTasks = computed(() =>
   rootTasks.value
@@ -54,7 +69,7 @@ const allTaskIds = (): string[] => {
   }
   return ids
 }
-const expandedIds = ref<Set<string>>(new Set(allTaskIds()))
+const expandedIds = ref<Set<string>>(new Set<string>())
 const toggleExpand = (id: string) => {
   if (expandedIds.value.has(id)) expandedIds.value.delete(id)
   else expandedIds.value.add(id)
@@ -81,7 +96,7 @@ const BAR_COLORS_500 = ['bg-blue-500', 'bg-emerald-500', 'bg-violet-500', 'bg-am
 const BAR_COLORS_900 = ['bg-blue-900', 'bg-emerald-900', 'bg-violet-900', 'bg-amber-900', 'bg-rose-900', 'bg-cyan-900', 'bg-indigo-900', 'bg-teal-900']
 
 const memberColorIdx = (userId: string): number => {
-  const idx = members.findIndex(m => m.user_id === userId)
+  const idx = members.value.findIndex(m => m.user_id === userId)
   return idx >= 0 ? idx % BAR_COLORS_500.length : BAR_COLORS_500.length - 1
 }
 
@@ -472,67 +487,7 @@ const handleDelete = () => {
 }
 
 // =====================================================================
-// タスク追加ダイアログ（詳細入力）
-// =====================================================================
-const showAddDialog = ref(false)
-const addParentId = ref<string | null>(null)
-
-const newTask = ref({
-  title: '',
-  description: '',
-  status: 'Todo' as TaskStatus,
-  start_date: '',
-  end_date: '',
-  estimated_hours: '' as number | '',
-})
-const addError = ref('')
-
-const openAddDialog = (parentId: string | null) => {
-  addParentId.value = parentId
-  newTask.value = { title: '', description: '', status: 'Todo', start_date: '', end_date: '', estimated_hours: '' }
-  addError.value = ''
-  showAddDialog.value = true
-}
-
-const handleAddTask = () => {
-  if (!newTask.value.title.trim()) { addError.value = 'タスク名は必須です'; return }
-  const parentTask = addParentId.value ? findTaskById(rootTasks.value, addParentId.value) : null
-  const depth = parentTask ? parentTask.depth + 1 : 0
-  const task_type: TaskType = depth >= 2 ? 'task' : 'item'
-  const task: Task = {
-    id: `t${Date.now()}`,
-    title: newTask.value.title.trim(),
-    description: newTask.value.description,
-    task_type,
-    status: newTask.value.status,
-    sort_order: parentTask ? (parentTask.children?.length ?? 0) + 1 : rootTasks.value.length + 1,
-    progress: 0,
-    start_date: newTask.value.start_date || null,
-    end_date: newTask.value.end_date || null,
-    actual_start_date: null,
-    actual_end_date: null,
-    estimated_hours: newTask.value.estimated_hours !== '' ? Number(newTask.value.estimated_hours) : null,
-    quarter_id: null,
-    parent_task_id: addParentId.value,
-    project_id: projectId,
-    wbs_no: '',
-    depth,
-    assignees: [],
-    tm_reviewer: null,
-    pj_reviewer: null,
-  }
-  if (parentTask) {
-    if (!parentTask.children) parentTask.children = []
-    parentTask.children.push(task)
-    expandedIds.value.add(parentTask.id)
-  } else {
-    rootTasks.value.push(task)
-  }
-  showAddDialog.value = false
-}
-
-// =====================================================================
-// 一括追加ダイアログ
+// タスク追加ダイアログ（一括追加）
 // =====================================================================
 const showBulkDialog = ref(false)
 const bulkText = ref('')
@@ -541,18 +496,14 @@ const bulkPreview = computed(() =>
   bulkText.value.split('\n').map(l => l.trim()).filter(l => l.length > 0)
 )
 
-const handleBulkAdd = () => {
-  bulkPreview.value.forEach((title, i) => {
-    rootTasks.value.push({
-      id: `t${Date.now()}_${i}`, title, description: '', task_type: 'item', status: 'Todo',
-      sort_order: rootTasks.value.length + i + 1,
-      progress: 0, start_date: null, end_date: null, actual_start_date: null, actual_end_date: null,
-      estimated_hours: null, quarter_id: null, parent_task_id: null, project_id: projectId, wbs_no: '',
-      depth: 0, assignees: [], tm_reviewer: null, pj_reviewer: null,
-    })
-  })
+const handleBulkAdd = async () => {
+  if (bulkPreview.value.length === 0) return
+  await api.tasks.bulkCreate(projectId, bulkPreview.value, filterQuarter.value || undefined)
   bulkText.value = ''
   showBulkDialog.value = false
+  const tasks = await api.tasks.list(projectId)
+  rootTasks.value = tasks
+  expandedIds.value = new Set(allTaskIds())
 }
 
 /** 初期表示時：ガントの今日列が左端付近に来るようスクロール */
@@ -563,7 +514,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div>
+  <div id="wbs_list__container">
     <div class="flex items-center gap-3 mb-4">
       <router-link :to="`/projects/${projectId}`" class="text-blue-600 hover:underline text-sm">
         ← プロジェクト詳細
@@ -572,16 +523,16 @@ onMounted(() => {
     </div>
 
     <!-- フィルター & アクションバー -->
-    <div class="flex flex-wrap items-center gap-2 mb-3">
-      <select v-model="filterStatus" class="border border-gray-300 rounded px-2 py-1.5 text-sm transition-colors hover:border-gray-400">
+    <div id="wbs_list__filter_area" class="flex flex-wrap items-center gap-2 mb-3">
+      <select id="wbs_list__status_select" v-model="filterStatus" class="border border-gray-300 rounded px-2 py-1.5 text-sm transition-colors hover:border-gray-400">
         <option value="">ステータス：全て</option>
         <option v-for="s in statusOptions" :key="s" :value="s" class="bg-white text-sky-900">{{ s }}</option>
       </select>
-      <select v-model="filterAssignee" class="border border-gray-300 rounded px-2 py-1.5 text-sm transition-colors hover:border-gray-400">
+      <select id="wbs_list__assignee_select" v-model="filterAssignee" class="border border-gray-300 rounded px-2 py-1.5 text-sm transition-colors hover:border-gray-400">
         <option value="">担当者：全て</option>
         <option v-for="m in members" :key="m.user_id" :value="m.user_id">{{ m.user_name }}</option>
       </select>
-      <select v-model="filterQuarter" class="border border-gray-300 rounded px-2 py-1.5 text-sm transition-colors hover:border-gray-400">
+      <select id="wbs_list__quarter_select" v-model="filterQuarter" class="border border-gray-300 rounded px-2 py-1.5 text-sm transition-colors hover:border-gray-400">
         <option value="">クォーター：全体</option>
         <option v-for="q in quarters" :key="q.id" :value="q.id">{{ q.title }}</option>
       </select>
@@ -624,14 +575,10 @@ onMounted(() => {
           Excel出力
         </router-link>
         <button v-if="isAdmin"
-          class="border border-blue-600 text-blue-600 px-3 py-1.5 rounded text-sm transition-colors hover:bg-blue-100"
-          @click="showBulkDialog = true">
-          一括追加
-        </button>
-        <button v-if="isAdmin"
+          id="wbs_list__add_task_btn"
           class="bg-blue-600 text-white px-3 py-1.5 rounded text-sm transition-colors hover:bg-blue-700"
-          @click="openAddDialog(null)">
-          + タスク追加
+          @click="showBulkDialog = true">
+          タスク追加
         </button>
       </div>
     </div>
@@ -651,7 +598,7 @@ onMounted(() => {
     </div>
 
     <!-- WBS + ガント統合テーブル（横・縦スクロール） -->
-    <div ref="tableWrapper" class="bg-white rounded-lg shadow border border-gray-500 overflow-x-auto overflow-y-auto max-h-[calc(100vh-220px)]" @click.self="showColMenu = false">
+    <div id="wbs_list__table_wrapper" ref="tableWrapper" class="bg-white rounded-lg shadow border border-gray-500 overflow-x-auto overflow-y-auto max-h-[calc(100vh-220px)]" @click.self="showColMenu = false">
       <table class="border-separate border-spacing-0 text-sm table-fixed" :style="{ width: tableWidth + 'px' }">
         <colgroup>
           <col :style="{ width: colLeft.title + 'px' }" />
@@ -708,11 +655,12 @@ onMounted(() => {
 
             <!-- ルートタスク行 -->
             <tr data-testid="task-row"
+              :id="`wbs_list__row_${task.id}`"
               :class="['border-b border-gray-500 group', isActiveToday(task) ? 'bg-amber-50 hover:bg-amber-100' : 'hover:bg-gray-50/60']">
-              <td :class="['sticky left-0 z-10 border-r border-b border-gray-500 px-3 py-2 text-sky-900 text-xs overflow-hidden relative', isActiveToday(task) ? 'bg-amber-50 group-hover:bg-amber-100' : 'bg-white group-hover:bg-gray-50/60']">
+              <td :class="['sticky left-0 z-10 border-r border-b border-gray-500 px-3 py-2 text-sky-900 text-xs overflow-hidden relative', isActiveToday(task) ? 'bg-amber-50 group-hover:bg-amber-100' : 'bg-white group-hover:bg-gray-50']">
                 {{ task.wbs_no }}<div class="absolute inset-y-0 right-0 w-px bg-gray-100"></div>
               </td>
-              <td :class="['sticky z-10 border-r border-b border-gray-500 px-3 py-2 font-medium overflow-hidden', isActiveToday(task) ? 'bg-amber-50 group-hover:bg-amber-100' : 'bg-white group-hover:bg-gray-50/60']" :style="{ left: colLeft.title + 'px' }">
+              <td :class="['sticky z-10 border-r border-b border-gray-500 px-3 py-2 font-medium overflow-hidden', isActiveToday(task) ? 'bg-amber-50 group-hover:bg-amber-100' : 'bg-white group-hover:bg-gray-50']" :style="{ left: colLeft.title + 'px' }">
                 <div class="flex items-center gap-1">
                   <button v-if="task.children?.length"
                     class="rounded hover:bg-gray-200 transition-colors w-5 h-5 flex items-center justify-center flex-shrink-0 text-sky-900"
@@ -721,7 +669,7 @@ onMounted(() => {
                   <span class="truncate text-sky-900">{{ task.title }}</span>
                 </div>
               </td>
-              <td v-if="show('status')" :class="['sticky z-10 border-r border-b border-gray-500 px-2 py-2 overflow-hidden', isActiveToday(task) ? 'bg-amber-50 group-hover:bg-amber-100' : 'bg-white group-hover:bg-gray-50/60']" :style="{ left: colLeft.status + 'px' }">
+              <td v-if="show('status')" :class="['sticky z-10 border-r border-b border-gray-500 px-2 py-2 overflow-hidden', isActiveToday(task) ? 'bg-amber-50 group-hover:bg-amber-100' : 'bg-white group-hover:bg-gray-50']" :style="{ left: colLeft.status + 'px' }">
                 <select v-if="task.task_type === 'task'" v-model="task.status" :class="statusClass(task.status)"
                   class="border rounded-full px-2 py-0.5 text-xs cursor-pointer w-full" data-testid="status-select">
                   <option v-for="s in statusOptions" :key="s" :value="s" class="bg-white text-sky-900">{{ s }}</option>
@@ -730,27 +678,25 @@ onMounted(() => {
                   {{ childStats(task).completed }} / {{ childStats(task).total }}
                 </span>
               </td>
-              <td v-if="show('assignee')" :class="['sticky z-10 border-r border-b border-gray-500 px-3 py-2 text-xs overflow-hidden', isActiveToday(task) ? 'bg-amber-50 group-hover:bg-amber-100' : memberCellBgClasses(task) || 'bg-white group-hover:bg-gray-50/60']" :style="{ left: colLeft.assignee + 'px' }">
+              <td v-if="show('assignee')" :class="['sticky z-10 border-r border-b border-gray-500 px-3 py-2 text-xs overflow-hidden', isActiveToday(task) ? 'bg-amber-50 group-hover:bg-amber-100' : memberCellBgClasses(task) || 'bg-white group-hover:bg-gray-50']" :style="{ left: colLeft.assignee + 'px' }">
                 <div class="truncate">{{ task.assignees.map(a => a.name).join(', ') || '—' }}</div>
                 <div v-if="task.task_type === 'item' && (task.tm_reviewer || task.pj_reviewer)" class="text-[10px] text-sky-900 leading-snug">
                   <span v-if="task.tm_reviewer">TM:{{ task.tm_reviewer.name }}</span>
                   <span v-if="task.pj_reviewer" class="ml-1">PJ:{{ task.pj_reviewer.name }}</span>
                 </div>
               </td>
-              <td v-if="show('start')" :class="['sticky z-10 border-r border-b border-gray-500 px-2 py-1 overflow-hidden', isActiveToday(task) ? 'bg-amber-50 group-hover:bg-amber-100' : 'bg-white group-hover:bg-gray-50/60']" :style="{ left: colLeft.start + 'px' }">
+              <td v-if="show('start')" :class="['sticky z-10 border-r border-b border-gray-500 px-2 py-1 overflow-hidden', isActiveToday(task) ? 'bg-amber-50 group-hover:bg-amber-100' : 'bg-white group-hover:bg-gray-50']" :style="{ left: colLeft.start + 'px' }">
                 <div class="text-xs">{{ formatDate(itemStartDate(task)) }}</div>
                 <div v-if="task.task_type === 'task'" class="text-[10px] text-sky-900 leading-snug">{{ formatDate(task.actual_start_date) }}</div>
               </td>
-              <td v-if="show('end')" :class="['sticky z-10 border-r border-b border-gray-500 px-2 py-1 overflow-hidden', isActiveToday(task) ? 'bg-amber-50 group-hover:bg-amber-100' : 'bg-white group-hover:bg-gray-50/60']" :style="{ left: colLeft.end + 'px' }">
+              <td v-if="show('end')" :class="['sticky z-10 border-r border-b border-gray-500 px-2 py-1 overflow-hidden', isActiveToday(task) ? 'bg-amber-50 group-hover:bg-amber-100' : 'bg-white group-hover:bg-gray-50']" :style="{ left: colLeft.end + 'px' }">
                 <div class="text-xs">{{ formatDate(itemEndDate(task)) }}</div>
                 <div v-if="task.task_type === 'task'" class="text-[10px] text-sky-900 leading-snug">{{ formatDate(task.actual_end_date) }}</div>
               </td>
-              <td v-if="show('hours')" :class="['sticky z-10 border-r border-b border-gray-500 px-3 py-2 text-xs text-right overflow-hidden', isActiveToday(task) ? 'bg-amber-50 group-hover:bg-amber-100' : 'bg-white group-hover:bg-gray-50/60']" :style="{ left: colLeft.hours + 'px' }">
+              <td v-if="show('hours')" :class="['sticky z-10 border-r border-b border-gray-500 px-3 py-2 text-xs text-right overflow-hidden', isActiveToday(task) ? 'bg-amber-50 group-hover:bg-amber-100' : 'bg-white group-hover:bg-gray-50']" :style="{ left: colLeft.hours + 'px' }">
                 {{ formatHours(itemHours(task)) }}
               </td>
-              <td v-if="show('op')" :class="['sticky z-10 border-r border-b border-gray-500 px-2 py-2 whitespace-nowrap overflow-hidden', isActiveToday(task) ? 'bg-amber-50 group-hover:bg-amber-100' : 'bg-white group-hover:bg-gray-50/60']" :style="{ left: colLeft.op + 'px' }">
-                <button class="rounded hover:bg-gray-200 transition-colors w-5 h-5 inline-flex items-center justify-center text-sky-900 text-sm"
-                  title="子タスクを追加" @click="openAddDialog(task.id)">+</button>
+              <td v-if="show('op')" :class="['sticky z-10 border-r border-b border-gray-500 px-2 py-2 whitespace-nowrap overflow-hidden', isActiveToday(task) ? 'bg-amber-50 group-hover:bg-amber-100' : 'bg-white group-hover:bg-gray-50']" :style="{ left: colLeft.op + 'px' }">
                 <router-link v-if="task.task_kind === 'レビュー依頼'"
                   :to="`/projects/${projectId}/tasks/${task.id}/reviews`"
                   class="rounded hover:bg-yellow-100 hover:text-yellow-600 transition-colors w-5 h-5 inline-flex items-center justify-center text-sky-900 ml-1"
@@ -797,6 +743,7 @@ onMounted(() => {
             <template v-if="expandedIds.has(task.id) && task.children">
               <template v-for="child in sortedChildren(task)" :key="child.id">
                 <tr data-testid="task-row-child"
+                  :id="`wbs_list__row_${child.id}`"
                   :class="['border-b border-gray-500 group', isActiveToday(child) ? 'bg-amber-50 hover:bg-amber-100' : 'bg-gray-50/30 hover:bg-gray-50/80']">
                   <td :class="['sticky left-0 z-10 border-r border-b border-gray-500 px-3 py-2 text-sky-900 text-xs overflow-hidden relative', isActiveToday(child) ? 'bg-amber-50 group-hover:bg-amber-100' : 'bg-gray-50 group-hover:bg-gray-100']">
                     {{ child.wbs_no }}<div class="absolute inset-y-0 right-0 w-px bg-gray-100"></div>
@@ -838,8 +785,6 @@ onMounted(() => {
                     {{ formatHours(itemHours(child)) }}
                   </td>
                   <td v-if="show('op')" :class="['sticky z-10 border-r border-b border-gray-500 px-2 py-2 whitespace-nowrap overflow-hidden', isActiveToday(child) ? 'bg-amber-50 group-hover:bg-amber-100' : 'bg-gray-50 group-hover:bg-gray-100']" :style="{ left: colLeft.op + 'px' }">
-                    <button class="rounded hover:bg-gray-200 transition-colors w-5 h-5 inline-flex items-center justify-center text-sky-900 text-sm"
-                      title="子タスクを追加" @click="openAddDialog(child.id)">+</button>
                     <router-link :to="`/projects/${projectId}/tasks/${child.id}`"
                       class="rounded hover:bg-blue-100 hover:text-blue-500 transition-colors w-5 h-5 inline-flex items-center justify-center text-sky-900 ml-1"
                       title="編集">
@@ -885,6 +830,7 @@ onMounted(() => {
                 <!-- 孫タスク行 -->
                 <template v-if="expandedIds.has(child.id) && child.children">
                   <tr v-for="grand in sortedChildren(child)" :key="grand.id" data-testid="task-row-grand"
+                    :id="`wbs_list__row_${grand.id}`"
                     :class="['border-b border-gray-500 group', isActiveToday(grand) ? 'bg-amber-50 hover:bg-amber-100' : 'bg-blue-50/10 hover:bg-blue-50/30']">
                     <td :class="['sticky left-0 z-10 border-r border-b border-gray-500 px-3 py-2 text-sky-900 text-xs overflow-hidden relative', isActiveToday(grand) ? 'bg-amber-50 group-hover:bg-amber-100' : 'bg-blue-50 group-hover:bg-blue-100']">
                       {{ grand.wbs_no }}<div class="absolute inset-y-0 right-0 w-px bg-gray-100"></div>
@@ -970,66 +916,20 @@ onMounted(() => {
       </table>
     </div>
 
-    <!-- ========== タスク追加ダイアログ ========== -->
-    <div v-if="showAddDialog" class="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-      <div class="bg-white rounded-lg shadow-lg p-6 w-[480px] max-h-[90vh] overflow-y-auto">
-        <h2 class="text-base font-semibold mb-4">{{ addParentId ? '子タスクを追加' : 'タスクを追加' }}</h2>
-        <div class="space-y-3">
-          <div>
-            <label class="block text-sm font-medium text-sky-900 mb-1">タスク名 <span class="text-red-500">*</span></label>
-            <input v-model="newTask.title" type="text" data-testid="new-task-title-input"
-              class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-            <p v-if="addError" class="text-red-500 text-xs mt-1">{{ addError }}</p>
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-sky-900 mb-1">説明</label>
-            <textarea v-model="newTask.description" rows="2"
-              class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-sky-900 mb-1">ステータス</label>
-            <select v-model="newTask.status" class="w-full border border-gray-300 rounded px-3 py-2 text-sm">
-              <option v-for="s in statusOptions" :key="s" :value="s" class="bg-white text-sky-900">{{ s }}</option>
-            </select>
-          </div>
-          <div class="grid grid-cols-2 gap-3">
-            <div>
-              <label class="block text-sm font-medium text-sky-900 mb-1">開始日</label>
-              <input v-model="newTask.start_date" type="date" class="w-full border border-gray-300 rounded px-3 py-2 text-sm" />
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-sky-900 mb-1">終了日</label>
-              <input v-model="newTask.end_date" type="date" class="w-full border border-gray-300 rounded px-3 py-2 text-sm" />
-            </div>
-          </div>
-          <div class="grid grid-cols-2 gap-3">
-            <div>
-              <label class="block text-sm font-medium text-sky-900 mb-1">見積時間（h）</label>
-              <input v-model.number="newTask.estimated_hours" type="number" min="0" class="w-full border border-gray-300 rounded px-3 py-2 text-sm" />
-            </div>
-          </div>
-        </div>
-        <div class="flex justify-end gap-2 mt-5">
-          <button class="px-4 py-2 text-sm text-gray-600 border rounded transition-colors hover:bg-gray-100" @click="showAddDialog = false">キャンセル</button>
-          <button class="px-4 py-2 text-sm text-white bg-blue-600 rounded transition-colors hover:bg-blue-700" @click="handleAddTask">追加</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- ========== 一括追加ダイアログ ========== -->
-    <div v-if="showBulkDialog" class="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+    <!-- ========== タスク追加ダイアログ（一括追加） ========== -->
+    <div v-if="showBulkDialog" id="wbs_list__bulk_dialog" class="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
       <div class="bg-white rounded-lg shadow-lg p-6 w-[480px]">
         <h2 class="text-base font-semibold mb-2">タスクを一括追加</h2>
         <p class="text-xs text-sky-900 mb-3">1行に1つのタスク名を入力してください。空行は無視されます。</p>
-        <textarea v-model="bulkText" rows="8"
+        <textarea id="wbs_list__bulk_textarea" v-model="bulkText" rows="8"
           placeholder="例）&#10;要件定義&#10;基本設計&#10;詳細設計"
           data-testid="bulk-add-textarea"
           class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono" />
         <div class="mt-2 text-xs text-sky-900">{{ bulkPreview.length }} 件追加されます</div>
         <div class="flex justify-end gap-2 mt-4">
-          <button class="px-4 py-2 text-sm text-gray-600 border rounded transition-colors hover:bg-gray-100"
+          <button id="wbs_list__bulk_cancel_btn" class="px-4 py-2 text-sm text-gray-600 border rounded transition-colors hover:bg-gray-100"
             @click="showBulkDialog = false; bulkText = ''">キャンセル</button>
-          <button :disabled="bulkPreview.length === 0"
+          <button id="wbs_list__bulk_submit_btn" :disabled="bulkPreview.length === 0"
             class="px-4 py-2 text-sm text-white bg-blue-600 rounded transition-colors hover:bg-blue-700 disabled:opacity-50"
             @click="handleBulkAdd">{{ bulkPreview.length }} 件追加</button>
         </div>
@@ -1037,12 +937,12 @@ onMounted(() => {
     </div>
 
     <!-- 削除確認ダイアログ -->
-    <div v-if="showDeleteDialog" class="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+    <div v-if="showDeleteDialog" id="wbs_list__delete_dialog" class="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
       <div class="bg-white rounded-lg shadow-lg p-6 w-80">
         <p class="text-sky-900 mb-4">このタスクを削除しますか？</p>
         <div class="flex justify-end gap-2">
-          <button class="px-4 py-2 text-sm border rounded transition-colors hover:bg-gray-100" @click="showDeleteDialog = false">キャンセル</button>
-          <button class="px-4 py-2 text-sm text-white bg-red-500 rounded transition-colors hover:bg-red-600" @click="handleDelete">削除する</button>
+          <button id="wbs_list__delete_cancel_btn" class="px-4 py-2 text-sm border rounded transition-colors hover:bg-gray-100" @click="showDeleteDialog = false">キャンセル</button>
+          <button id="wbs_list__delete_confirm_btn" class="px-4 py-2 text-sm text-white bg-red-500 rounded transition-colors hover:bg-red-600" @click="handleDelete">削除する</button>
         </div>
       </div>
     </div>

@@ -1,12 +1,19 @@
 <script setup lang="ts">
 // 04-XX 進捗一覧（3階層集計・時間/件数/日付/遅延）
-import { computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
-import { mockTasks } from '@/mocks/data'
+import { api } from '@/api'
 import type { Task } from '@/types'
 
 const route = useRoute()
 const projectId = route.params.projectId as string
+
+/** バックエンドから取得したタスクツリー（ルートのみ） */
+const rootTasks = ref<Task[]>([])
+
+onMounted(async () => {
+  rootTasks.value = await api.tasks.list(projectId)
+})
 
 /** 今日（時刻なし） */
 const today = new Date()
@@ -123,7 +130,7 @@ const shouldSkip = (node: Task, parent: Task | null): boolean => {
 // =============================================================
 const rows = computed<NodeStats[]>(() => {
   const result: NodeStats[] = []
-  const depth0 = mockTasks.filter(t => t.project_id === projectId && t.depth === 0)
+  const depth0 = rootTasks.value
 
   for (const d0 of depth0) {
     result.push(calcStats(d0))
@@ -170,12 +177,12 @@ const fmtDelay = (h: number): string => {
 </script>
 
 <template>
-  <div>
+  <div id="progress_list__container">
     <h1 class="text-xl font-bold text-sky-900 mb-4">進捗一覧</h1>
 
     <div class="bg-white rounded-lg shadow overflow-x-auto overflow-y-auto border border-gray-500 max-h-[calc(100vh-160px)]">
-      <table class="text-xs border-separate border-spacing-0 w-max min-w-full">
-        <thead>
+      <table id="progress_list__table" class="text-xs border-separate border-spacing-0 w-max min-w-full">
+        <thead id="progress_list__thead">
           <tr class="bg-gray-100 sticky top-0 z-10">
             <!-- 固定列 -->
             <th class="border-b border-r border-gray-500 px-3 py-2 text-left text-sky-900 whitespace-nowrap sticky left-0 bg-gray-100 z-20">項番</th>
@@ -201,10 +208,11 @@ const fmtDelay = (h: number): string => {
             <th class="border-b border-gray-500 px-3 py-2 text-right text-sky-900 whitespace-nowrap">遅延/巻き</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody id="progress_list__tbody">
           <tr
             v-for="row in rows"
             :key="row.wbs_no"
+            :id="`progress_list__row_${row.wbs_no}`"
             :class="depthRowClass(row.depth)"
             class="hover:brightness-95 transition-all"
           >

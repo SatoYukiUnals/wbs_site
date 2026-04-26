@@ -36,7 +36,7 @@ const handleSubmit = async () => {
 </script>
 
 <template>
-  <div class="max-w-lg">
+  <div id="roadmap_create__container" class="max-w-lg">
     <div class="flex items-center gap-3 mb-6">
       <router-link :to="`/projects/${projectId}/roadmap`" class="text-blue-600 hover:underline text-sm">
         ← ロードマップ
@@ -45,10 +45,11 @@ const handleSubmit = async () => {
     </div>
 
     <div class="bg-white rounded-lg shadow p-6">
-      <form @submit.prevent="handleSubmit" class="space-y-4">
+      <form id="roadmap_create__form" @submit.prevent="handleSubmit" class="space-y-4">
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">タイトル <span class="text-red-500">*</span></label>
+          <label for="roadmap_create__title_input" class="block text-sm font-medium text-gray-700 mb-1">タイトル <span class="text-red-500">*</span></label>
           <input
+            id="roadmap_create__title_input"
             v-model="form.title"
             type="text"
             data-testid="roadmap-item-title-input"
@@ -58,8 +59,9 @@ const handleSubmit = async () => {
         </div>
 
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">説明</label>
+          <label for="roadmap_create__description_textarea" class="block text-sm font-medium text-gray-700 mb-1">説明</label>
           <textarea
+            id="roadmap_create__description_textarea"
             v-model="form.description"
             rows="3"
             class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -68,8 +70,9 @@ const handleSubmit = async () => {
 
         <div class="grid grid-cols-2 gap-4">
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">クォーター <span class="text-red-500">*</span></label>
+            <label for="roadmap_create__quarter_select" class="block text-sm font-medium text-gray-700 mb-1">クォーター <span class="text-red-500">*</span></label>
             <select
+              id="roadmap_create__quarter_select"
               v-model="form.quarter_id"
               class="w-full border border-gray-300 rounded px-3 py-2 text-sm"
             >
@@ -79,8 +82,8 @@ const handleSubmit = async () => {
             <p v-if="errors.quarter_id" class="text-red-500 text-xs mt-1">{{ errors.quarter_id }}</p>
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">ステータス</label>
-            <select v-model="form.status" class="w-full border border-gray-300 rounded px-3 py-2 text-sm">
+            <label for="roadmap_create__status_select" class="block text-sm font-medium text-gray-700 mb-1">ステータス</label>
+            <select id="roadmap_create__status_select" v-model="form.status" class="w-full border border-gray-300 rounded px-3 py-2 text-sm">
               <option value="計画中">計画中</option>
               <option value="進行中">進行中</option>
               <option value="完了">完了</option>
@@ -91,6 +94,7 @@ const handleSubmit = async () => {
 
         <div class="flex gap-2 pt-2">
           <button
+            id="roadmap_create__save_btn"
             type="submit"
             :disabled="isLoading"
             class="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700 disabled:opacity-50"

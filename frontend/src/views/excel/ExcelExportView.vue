@@ -1,14 +1,19 @@
 <script setup lang="ts">
 // 10-01-04 Excel出力設定画面
-import { reactive, ref } from 'vue'
+import { reactive, ref, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
-import { mockQuarters } from '@/mocks/data'
+import { api } from '@/api'
+import type { Quarter } from '@/types'
 
 const route = useRoute()
 const projectId = route.params.projectId as string
 
-const quarters = mockQuarters.filter(q => q.project_id === projectId)
+const quarters = ref<Quarter[]>([])
 const isExporting = ref(false)
+
+onMounted(async () => {
+  quarters.value = await api.quarters.list(projectId)
+})
 
 /** 出力設定 */
 const settings = reactive({
@@ -27,7 +32,7 @@ const handleExport = async () => {
 </script>
 
 <template>
-  <div class="max-w-lg">
+  <div id="excel_export__container" class="max-w-lg">
     <div class="flex items-center gap-3 mb-6">
       <router-link :to="`/projects/${projectId}`" class="text-blue-600 hover:underline text-sm">
         ← プロジェクト詳細
@@ -39,8 +44,9 @@ const handleExport = async () => {
       <div class="space-y-5">
         <!-- クォーター選択 -->
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">クォーター（任意）</label>
+          <label for="excel_export__quarter_select" class="block text-sm font-medium text-gray-700 mb-1">クォーター（任意）</label>
           <select
+            id="excel_export__quarter_select"
             v-model="settings.quarter_id"
             class="w-full border border-gray-300 rounded px-3 py-2 text-sm"
           >
@@ -56,6 +62,7 @@ const handleExport = async () => {
           <div class="space-y-2">
             <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
               <input
+                id="excel_export__include_gantt_input"
                 v-model="settings.include_gantt"
                 type="checkbox"
                 data-testid="include-gantt-checkbox"
@@ -65,6 +72,7 @@ const handleExport = async () => {
             </label>
             <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
               <input
+                id="excel_export__include_completed_input"
                 v-model="settings.include_completed"
                 type="checkbox"
                 class="rounded"
@@ -83,6 +91,7 @@ const handleExport = async () => {
 
         <div class="pt-2">
           <button
+            id="excel_export__export_btn"
             :disabled="isExporting"
             class="bg-green-600 text-white px-6 py-2 rounded text-sm hover:bg-green-700 disabled:opacity-50 w-full"
             data-testid="export-button"

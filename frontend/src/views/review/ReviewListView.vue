@@ -1,27 +1,21 @@
 <script setup lang="ts">
 // 08-01-00 レビュー一覧画面
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useRoute } from 'vue-router'
-import { mockReviews, mockTasks } from '@/mocks/data'
 import type { Review, ReviewStatus } from '@/types'
 
 const route = useRoute()
 const projectId = route.params.projectId as string
 
-/** プロジェクト内のタスクIDセットを構築 */
-const projectTaskIds = new Set(mockTasks.filter(t => t.project_id === projectId).map(t => t.id))
-
-const reviews = ref<Review[]>(mockReviews.filter(r => projectTaskIds.has(r.task_id)))
+// プロジェクト単位のレビュー一覧エンドポイントは現在未実装のため空状態
+const reviews = ref<Review[]>([])
 const filterStatus = ref<ReviewStatus | ''>('')
 
-const filteredReviews = ref<Review[]>(reviews.value)
-
-/** フィルター適用 */
-const applyFilter = () => {
-  filteredReviews.value = filterStatus.value
+const filteredReviews = computed<Review[]>(() =>
+  filterStatus.value
     ? reviews.value.filter(r => r.status === filterStatus.value)
     : reviews.value
-}
+)
 
 /** ステータスラベルと色 */
 const statusLabel = (status: ReviewStatus): string => {
@@ -48,7 +42,7 @@ const statusColor = (status: ReviewStatus): string => {
 </script>
 
 <template>
-  <div>
+  <div id="review_list__container">
     <div class="flex items-center gap-3 mb-6">
       <router-link :to="`/projects/${projectId}`" class="text-blue-600 hover:underline text-sm">
         ← プロジェクト詳細
@@ -57,8 +51,9 @@ const statusColor = (status: ReviewStatus): string => {
     </div>
 
     <!-- フィルター -->
-    <div class="flex items-center gap-3 mb-4">
+    <div id="review_list__filter_area" class="flex items-center gap-3 mb-4">
       <select
+        id="review_list__status_select"
         v-model="filterStatus"
         class="border border-gray-300 rounded px-3 py-1.5 text-sm"
         @change="applyFilter"
@@ -74,8 +69,8 @@ const statusColor = (status: ReviewStatus): string => {
 
     <!-- レビュー一覧テーブル -->
     <div class="bg-white rounded-lg shadow overflow-hidden">
-      <table class="w-full text-sm">
-        <thead class="bg-gray-50 border-b">
+      <table id="review_list__table" class="w-full text-sm">
+        <thead id="review_list__thead" class="bg-gray-50 border-b">
           <tr>
             <th class="text-left px-4 py-3 text-gray-600 font-medium">タスク名</th>
             <th class="text-left px-4 py-3 text-gray-600 font-medium">ステータス</th>
@@ -84,10 +79,11 @@ const statusColor = (status: ReviewStatus): string => {
             <th class="px-4 py-3"></th>
           </tr>
         </thead>
-        <tbody>
+        <tbody id="review_list__tbody">
           <tr
             v-for="review in filteredReviews"
             :key="review.id"
+            :id="`review_list__row_${review.id}`"
             data-testid="review-row"
             class="border-b last:border-0 hover:bg-gray-50"
           >

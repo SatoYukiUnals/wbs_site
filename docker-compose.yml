@@ -55,26 +55,29 @@ services:
 
   # ------------------------------------------------------------------
   # バックエンド（Django + runserver）
-  # ※ 実装②フェーズで有効化 — それまではコメントアウト
   # ------------------------------------------------------------------
-  # backend:
-  #   build:
-  #     context: ./backend
-  #     dockerfile: Dockerfile.dev
-  #   container_name: wbs_backend_dev
-  #   ports:
-  #     - "8000:8000"
-  #   volumes:
-  #     - ./backend:/app
-  #   environment:
-  #     DATABASE_URL: postgresql://${POSTGRES_USER:-wbs_user}:${POSTGRES_PASSWORD:-wbs_password}@db:5432/${POSTGRES_DB:-wbs_db}
-  #     SECRET_KEY: ${DJANGO_SECRET_KEY:-dev_secret_key}
-  #     DEBUG: "True"
-  #   networks:
-  #     - app_net
-  #   depends_on:
-  #     db:
-  #       condition: service_healthy
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    container_name: wbs_backend_dev
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-wbs_user}:${POSTGRES_PASSWORD:-wbs_password}@db:5432/${POSTGRES_DB:-wbs_db}
+      SECRET_KEY: ${DJANGO_SECRET_KEY:-dev_secret_key}
+      DEBUG: "True"
+      CORS_ALLOWED_ORIGINS: "http://localhost:5173"
+    networks:
+      - app_net
+    depends_on:
+      db:
+        condition: service_healthy
+    command: >
+      sh -c "python manage.py migrate --no-input &&
+             python manage.py runserver 0.0.0.0:8000"
 
 networks:
   app_net:

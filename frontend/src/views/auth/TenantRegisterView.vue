@@ -39,14 +39,15 @@ const handleSubmit = async () => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-gray-50 flex items-center justify-center">
+  <div id="tenant_register__container" class="min-h-screen bg-gray-50 flex items-center justify-center">
     <div class="bg-white rounded-lg shadow p-8 w-full max-w-md">
       <h1 class="text-2xl font-bold text-sky-900 mb-6 text-center">新規テナント登録</h1>
 
-      <form @submit.prevent="handleSubmit" class="space-y-4">
+      <form id="tenant_register__form" @submit.prevent="handleSubmit" class="space-y-4">
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">テナント名 <span class="text-red-500">*</span></label>
+          <label for="tenant_register__tenant_name_input" class="block text-sm font-medium text-gray-700 mb-1">テナント名 <span class="text-red-500">*</span></label>
           <input
+            id="tenant_register__tenant_name_input"
             v-model="form.tenant_name"
             type="text"
             data-testid="register-tenant-name"
@@ -56,8 +57,9 @@ const handleSubmit = async () => {
         </div>
 
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">メールアドレス <span class="text-red-500">*</span></label>
+          <label for="tenant_register__email_input" class="block text-sm font-medium text-gray-700 mb-1">メールアドレス <span class="text-red-500">*</span></label>
           <input
+            id="tenant_register__email_input"
             v-model="form.email"
             type="email"
             data-testid="register-email"
@@ -67,8 +69,9 @@ const handleSubmit = async () => {
         </div>
 
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">パスワード <span class="text-red-500">*</span></label>
+          <label for="tenant_register__password_input" class="block text-sm font-medium text-gray-700 mb-1">パスワード <span class="text-red-500">*</span></label>
           <input
+            id="tenant_register__password_input"
             v-model="form.password"
             type="password"
             data-testid="register-password"
@@ -78,8 +81,9 @@ const handleSubmit = async () => {
         </div>
 
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">パスワード（確認）<span class="text-red-500">*</span></label>
+          <label for="tenant_register__password_confirm_input" class="block text-sm font-medium text-gray-700 mb-1">パスワード（確認）<span class="text-red-500">*</span></label>
           <input
+            id="tenant_register__password_confirm_input"
             v-model="form.password_confirm"
             type="password"
             data-testid="register-password-confirm"
@@ -89,6 +93,7 @@ const handleSubmit = async () => {
         </div>
 
         <button
+          id="tenant_register__submit_btn"
           type="submit"
           data-testid="register-submit"
           class="w-full bg-blue-600 text-white py-2 rounded font-medium text-sm hover:bg-blue-700 disabled:opacity-50"

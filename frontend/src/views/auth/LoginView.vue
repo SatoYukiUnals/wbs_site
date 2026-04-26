@@ -11,25 +11,16 @@ const form = reactive({ email: '', password: '' })
 const error = ref('')
 const isLoading = ref(false)
 
-/**
- * ログインボタン押下時の処理
- * バリデーション後、MOCKログインを実行してダッシュボードへ遷移する
- */
+/** ログインボタン押下時の処理 */
 const handleSubmit = async () => {
   error.value = ''
-
-  // 必須チェック
   if (!form.email || !form.password) {
     error.value = 'メールアドレスとパスワードを入力してください'
     return
   }
-
   isLoading.value = true
-  // MOCKでは常に成功
-  const ok = authStore.login(form.email, form.password)
+  const ok = await authStore.login(form.email, form.password)
   isLoading.value = false
-
-  // ログイン成功時はダッシュボードへ遷移
   if (ok) {
     router.push('/dashboard')
   } else {
@@ -39,7 +30,7 @@ const handleSubmit = async () => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-gray-50 flex items-center justify-center">
+  <div id="login__container" class="min-h-screen bg-gray-50 flex items-center justify-center">
     <div class="bg-white rounded-lg shadow p-8 w-full max-w-sm">
       <h1 class="text-2xl font-bold text-sky-900 mb-6 text-center">WBS管理</h1>
 
@@ -48,10 +39,11 @@ const handleSubmit = async () => {
         {{ error }}
       </p>
 
-      <form @submit.prevent="handleSubmit" class="space-y-4">
+      <form id="login__form" @submit.prevent="handleSubmit" class="space-y-4">
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">メールアドレス</label>
+          <label for="login__email_input" class="block text-sm font-medium text-gray-700 mb-1">メールアドレス</label>
           <input
+            id="login__email_input"
             v-model="form.email"
             type="email"
             data-testid="login-email"
@@ -61,8 +53,9 @@ const handleSubmit = async () => {
         </div>
 
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">パスワード</label>
+          <label for="login__password_input" class="block text-sm font-medium text-gray-700 mb-1">パスワード</label>
           <input
+            id="login__password_input"
             v-model="form.password"
             type="password"
             data-testid="login-password"
@@ -72,6 +65,7 @@ const handleSubmit = async () => {
         </div>
 
         <button
+          id="login__submit_btn"
           type="submit"
           data-testid="login-submit"
           class="w-full bg-blue-600 text-white py-2 rounded font-medium text-sm hover:bg-blue-700 disabled:opacity-50"

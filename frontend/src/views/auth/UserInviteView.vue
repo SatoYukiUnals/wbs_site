@@ -36,7 +36,7 @@ const handleSubmit = async () => {
 </script>
 
 <template>
-  <div class="max-w-md">
+  <div id="user_invite__container" class="max-w-md">
     <div class="flex items-center gap-3 mb-6">
       <router-link to="/users" class="text-blue-600 hover:underline text-sm">
         ← ユーザー管理
@@ -50,10 +50,11 @@ const handleSubmit = async () => {
         {{ successMessage }}
       </p>
 
-      <form @submit.prevent="handleSubmit" class="space-y-4">
+      <form id="user_invite__form" @submit.prevent="handleSubmit" class="space-y-4">
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">メールアドレス <span class="text-red-500">*</span></label>
+          <label for="user_invite__email_input" class="block text-sm font-medium text-gray-700 mb-1">メールアドレス <span class="text-red-500">*</span></label>
           <input
+            id="user_invite__email_input"
             v-model="form.email"
             type="email"
             data-testid="invite-email"
@@ -64,8 +65,9 @@ const handleSubmit = async () => {
         </div>
 
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">ロール</label>
+          <label for="user_invite__role_select" class="block text-sm font-medium text-gray-700 mb-1">ロール</label>
           <select
+            id="user_invite__role_select"
             v-model="form.role"
             data-testid="invite-role"
             class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -77,6 +79,7 @@ const handleSubmit = async () => {
 
         <div class="flex gap-2 pt-2">
           <button
+            id="user_invite__submit_btn"
             type="submit"
             data-testid="invite-submit"
             class="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700 disabled:opacity-50"

@@ -2,6 +2,7 @@
 // 01-03-03 プロフィール画面
 import { reactive, ref } from 'vue'
 import { useAuthStore } from '@/stores/auth'
+import { api } from '@/api'
 
 const authStore = useAuthStore()
 
@@ -13,35 +14,32 @@ const isLoading = ref(false)
 const successMessage = ref('')
 const errors = reactive({ display_name: '', email: '' })
 
-/**
- * バリデーション処理
- */
+/** バリデーション処理 */
 const validate = (): boolean => {
   errors.display_name = form.display_name ? '' : '表示名は必須です'
   errors.email = form.email ? '' : 'メールアドレスは必須です'
   return !errors.display_name && !errors.email
 }
 
-/**
- * プロフィール保存ボタン押下時の処理
- * MOCK：ストアの表示名を更新して成功メッセージを表示する
- */
+/** プロフィール保存ボタン押下時の処理 */
 const handleSubmit = async () => {
   if (!validate()) return
   isLoading.value = true
-  await new Promise(r => setTimeout(r, 400))
-  if (authStore.currentUser) {
-    authStore.currentUser.display_name = form.display_name
-    authStore.currentUser.email = form.email
+  try {
+    const updated = await api.auth.updateProfile(form.display_name)
+    if (authStore.currentUser) {
+      authStore.currentUser.display_name = updated.display_name
+    }
+    successMessage.value = 'プロフィールを更新しました'
+    setTimeout(() => { successMessage.value = '' }, 3000)
+  } finally {
+    isLoading.value = false
   }
-  isLoading.value = false
-  successMessage.value = 'プロフィールを更新しました'
-  setTimeout(() => { successMessage.value = '' }, 3000)
 }
 </script>
 
 <template>
-  <div class="max-w-md">
+  <div id="profile__container" class="max-w-md">
     <h1 class="text-xl font-bold text-sky-900 mb-6">プロフィール</h1>
 
     <div class="bg-white rounded-lg shadow p-6">
@@ -49,10 +47,11 @@ const handleSubmit = async () => {
         {{ successMessage }}
       </p>
 
-      <form @submit.prevent="handleSubmit" class="space-y-4">
+      <form id="profile__form" @submit.prevent="handleSubmit" class="space-y-4">
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">表示名 <span class="text-red-500">*</span></label>
+          <label for="profile__display_name_input" class="block text-sm font-medium text-gray-700 mb-1">表示名 <span class="text-red-500">*</span></label>
           <input
+            id="profile__display_name_input"
             v-model="form.display_name"
             type="text"
             data-testid="profile-display-name"
@@ -62,8 +61,9 @@ const handleSubmit = async () => {
         </div>
 
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">メールアドレス <span class="text-red-500">*</span></label>
+          <label for="profile__email_input" class="block text-sm font-medium text-gray-700 mb-1">メールアドレス <span class="text-red-500">*</span></label>
           <input
+            id="profile__email_input"
             v-model="form.email"
             type="email"
             data-testid="profile-email"
@@ -78,6 +78,7 @@ const handleSubmit = async () => {
         </div>
 
         <button
+          id="profile__save_btn"
           type="submit"
           data-testid="profile-save"
           class="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700 disabled:opacity-50"

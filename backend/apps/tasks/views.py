@@ -100,8 +100,12 @@ class TaskBulkCreateView(APIView):
         if project is None:
             return Response({'detail': 'プロジェクトが見つかりません。'}, status=status.HTTP_404_NOT_FOUND)
 
+        from django.db.models import Max
+
         tasks_data = request.data if isinstance(request.data, list) else request.data.get('tasks', [])
         created_tasks = []
+        # 親ごとに次の order 値をキャッシュする（バッチ内で重複しないよう +1 ずつ増やす）
+        next_order: dict = {}
 
         for task_data in tasks_data:
             serializer = TaskCreateSerializer(data=task_data)
@@ -114,13 +118,29 @@ class TaskBulkCreateView(APIView):
             if parent_task and parent_task.depth >= 2:
                 continue  # 深さ超過は無視する
 
+            # 親ごとに既存最大 order+1 をベースに order を割り当てる
+            parent_key = str(parent_task.id) if parent_task else '__root__'
+            if parent_key not in next_order:
+                existing_max = Task.objects.filter(
+                    project=project,
+                    parent_task=parent_task,
+                    deleted_at__isnull=True,
+                ).aggregate(v=Max('order'))['v'] or 0
+                next_order[parent_key] = existing_max + 1
+            data['order'] = next_order[parent_key]
+            next_order[parent_key] += 1
+
             task = Task.objects.create(project=project, depth=depth, wbs_no='', **data)
-            task.wbs_no = generate_wbs_no(task)
-            task.save(update_fields=['wbs_no'])
             created_tasks.append(task)
 
+        # 全タスクの wbs_no を再採番して整合させる
+        regenerate_wbs_nos(project)
+
+        # 再採番後の最新 wbs_no を返す
+        created_ids = [t.id for t in created_tasks]
+        refreshed = list(Task.objects.filter(id__in=created_ids).order_by('wbs_no'))
         return Response(
-            TaskSerializer(created_tasks, many=True).data,
+            TaskSerializer(refreshed, many=True).data,
             status=status.HTTP_201_CREATED,
         )
 
@@ -317,7 +337,7 @@ class ReviewView(APIView):
 
         return Response(ReviewSerializer(review).data)
 
-    def patch(self, request, project_id, task_id, review_id):
+    def post(self, request, project_id, task_id, review_id):
         """レビューにコメントを追加する"""
         try:
             review = Review.objects.get(
@@ -446,6 +466,20 @@ class ReviewHistoryView(generics.ListAPIView):
             task__project__id=self.kwargs['project_id'],
             task__project__tenant=self.request.user.tenant,
         )
+
+
+class ProjectReviewListView(generics.ListAPIView):
+    """プロジェクト内の全レビュー一覧エンドポイント"""
+
+    serializer_class = ReviewSerializer
+
+    def get_queryset(self):
+        """プロジェクト配下の全タスクのレビューをまとめて返す"""
+        return Review.objects.filter(
+            task__project__id=self.kwargs['project_id'],
+            task__project__tenant=self.request.user.tenant,
+            task__deleted_at__isnull=True,
+        ).select_related('task', 'reviewer').order_by('-created_at')
 
 
 class ApplyTemplateView(APIView):

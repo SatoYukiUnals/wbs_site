@@ -340,26 +340,90 @@ class DashboardView(APIView):
         })
 
 
-# ---- 自動割り振り（スタブ実装） ----
+# ---- 自動割り振り ----
+
+def _build_auto_assign_list(project):
+    """担当者未割り当ての task_type='task' をラウンドロビンで割り振り結果リストを返す"""
+    from apps.tasks.models import Task
+    from django.db.models import Count
+
+    members = list(
+        ProjectMember.objects.filter(project=project)
+        .select_related('user')
+        .order_by('id')
+    )
+    if not members:
+        return []
+
+    tasks = list(
+        Task.objects.filter(
+            project=project,
+            task_type='task',
+            deleted_at__isnull=True,
+        ).annotate(
+            assignee_count=Count('assignees')
+        ).filter(assignee_count=0).order_by('wbs_no')
+    )
+
+    return [
+        {
+            'task_id': str(task.id),
+            'task_title': task.title,
+            'assignee_id': str(members[i % len(members)].user_id),
+            'assignee_name': members[i % len(members)].user.username,
+        }
+        for i, task in enumerate(tasks)
+    ]
+
 
 class AutoAssignPreviewView(APIView):
-    """自動割り振りプレビューエンドポイント（スタブ）"""
+    """自動割り振りプレビューエンドポイント"""
 
     permission_classes = [permissions.IsAuthenticated, IsAdminOrAbove]
 
-    def post(self, request, project_id):
-        """割り振り結果のプレビューを返す（未実装）"""
-        return Response({'detail': '自動割り振りプレビューは現在未実装です。', 'assignments': []})
+    def get(self, request, project_id):
+        """担当者未割り当てタスクのラウンドロビン割り振り結果をプレビューとして返す"""
+        try:
+            project = Project.objects.get(
+                id=project_id,
+                tenant=request.user.tenant,
+                deleted_at__isnull=True,
+            )
+        except Project.DoesNotExist:
+            return Response({'detail': 'プロジェクトが見つかりません。'}, status=status.HTTP_404_NOT_FOUND)
+
+        return Response(_build_auto_assign_list(project))
 
 
 class AutoAssignConfirmView(APIView):
-    """自動割り振り確定エンドポイント（スタブ）"""
+    """自動割り振り確定エンドポイント"""
 
     permission_classes = [permissions.IsAuthenticated, IsAdminOrAbove]
 
     def post(self, request, project_id):
-        """割り振りを確定して実行する（未実装）"""
-        return Response({'detail': '自動割り振り確定は現在未実装です。'})
+        """プレビューと同じ割り振りを実際に保存する"""
+        from apps.tasks.models import Task, TaskAssignee
+        from apps.accounts.models import User
+
+        try:
+            project = Project.objects.get(
+                id=project_id,
+                tenant=request.user.tenant,
+                deleted_at__isnull=True,
+            )
+        except Project.DoesNotExist:
+            return Response({'detail': 'プロジェクトが見つかりません。'}, status=status.HTTP_404_NOT_FOUND)
+
+        assignments = _build_auto_assign_list(project)
+        for item in assignments:
+            try:
+                task = Task.objects.get(id=item['task_id'])
+                user = User.objects.get(id=item['assignee_id'])
+                TaskAssignee.objects.get_or_create(task=task, user=user)
+            except (Task.DoesNotExist, User.DoesNotExist):
+                continue
+
+        return Response({'assigned': len(assignments)})
 
 
 class AutoAssignLogView(generics.ListAPIView):
@@ -377,11 +441,52 @@ class AutoAssignLogView(generics.ListAPIView):
 # ---- Excel 出力・レポート（スタブ実装） ----
 
 class ExcelExportView(APIView):
-    """WBS Excel 出力エンドポイント（スタブ）"""
+    """WBS Excel 出力エンドポイント"""
 
     def post(self, request, project_id):
-        """WBS を Excel ファイルとして出力する（未実装）"""
-        return Response({'detail': 'Excel 出力は現在未実装です。'})
+        """WBS・直近のタスク・進捗一覧を含む Excel ファイルを返す"""
+        import urllib.parse
+        from datetime import date as date_cls
+
+        from django.http import HttpResponse
+
+        from .excel import export_excel
+
+        try:
+            project = Project.objects.get(
+                id=project_id,
+                tenant=request.user.tenant,
+                deleted_at__isnull=True,
+            )
+        except Project.DoesNotExist:
+            return Response({'detail': 'プロジェクトが見つかりません。'}, status=status.HTTP_404_NOT_FOUND)
+
+        quarter_id = request.data.get('quarter_id') or None
+        start_str  = request.data.get('start_date') or None
+        end_str    = request.data.get('end_date') or None
+
+        start_date = None
+        end_date   = None
+        if start_str:
+            try:
+                start_date = date_cls.fromisoformat(start_str)
+            except ValueError:
+                pass
+        if end_str:
+            try:
+                end_date = date_cls.fromisoformat(end_str)
+            except ValueError:
+                pass
+
+        buf = export_excel(project, quarter_id=quarter_id, start_date=start_date, end_date=end_date)
+
+        safe_name = urllib.parse.quote(f'WBS_{project.name}.xlsx')
+        response = HttpResponse(
+            buf.read(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        )
+        response['Content-Disposition'] = f"attachment; filename*=UTF-8''{safe_name}"
+        return response
 
 
 class ReportGenerateView(APIView):

@@ -5,6 +5,7 @@ from django.urls import path
 
 from .views import (
     ApplyTemplateView,
+    ProjectReviewListView,
     ReviewApproveView,
     ReviewHistoryView,
     ReviewRejectView,
@@ -51,6 +52,13 @@ urlpatterns = [
         'projects/<uuid:project_id>/tasks/<uuid:task_id>/assignees/<uuid:user_id>/',
         TaskAssigneeView.as_view(),
         name='task-assignee-delete',
+    ),
+
+    # プロジェクト単位レビュー一覧
+    path(
+        'projects/<uuid:project_id>/reviews/',
+        ProjectReviewListView.as_view(),
+        name='project-review-list',
     ),
 
     # レビュー管理

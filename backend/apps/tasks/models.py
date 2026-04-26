@@ -112,6 +112,7 @@ class Task(models.Model):
     class Meta:
         verbose_name = 'タスク'
         verbose_name_plural = 'タスク一覧'
+        ordering = ['order', 'created_at']
         indexes = [
             # ルートタスク取得・論理削除フィルタリング用
             models.Index(fields=['project', 'parent_task', 'deleted_at']),

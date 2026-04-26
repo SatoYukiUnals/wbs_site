@@ -285,11 +285,21 @@ export const api = {
       return adaptTask(data)
     },
 
-    /** タスクを一括作成する（タイトルの配列を渡す。quarterId を指定すると quarter フィールドも送信する） */
-    bulkCreate: async (projectId: string, titles: string[], quarterId?: string): Promise<Task[]> => {
-      const payload = titles.map(title => quarterId ? { title, quarter: quarterId } : { title })
+    /** タスクを一括作成する（タイトルの配列を渡す。quarterId・parentTaskId・taskType を指定すると各フィールドも送信する） */
+    bulkCreate: async (projectId: string, titles: string[], quarterId?: string, parentTaskId?: string, taskType?: string): Promise<Task[]> => {
+      const payload = titles.map(title => ({
+        title,
+        ...(quarterId ? { quarter: quarterId } : {}),
+        ...(parentTaskId ? { parent_task: parentTaskId } : {}),
+        ...(taskType ? { task_type: taskType } : {}),
+      }))
       const { data } = await http.post(`/projects/${projectId}/tasks/bulk/`, payload)
       return (data as ApiTask[]).map(adaptTask)
+    },
+
+    /** タスク削除 */
+    delete: async (projectId: string, taskId: string): Promise<void> => {
+      await http.delete(`/projects/${projectId}/tasks/${taskId}/`)
     },
   },
 
@@ -322,11 +332,30 @@ export const api = {
   },
 
   reviews: {
+    /** プロジェクト内の全レビュー一覧 */
+    listByProject: async (projectId: string): Promise<Review[]> => {
+      const { data } = await http.get(`/projects/${projectId}/reviews/`)
+      return (data as ApiReview[]).map(adaptReview)
+    },
+
     /** タスクのレビュー一覧 */
     list: async (projectId: string, taskId: string): Promise<Review[]> => {
       const { data } = await http.get(`/projects/${projectId}/tasks/${taskId}/reviews/`)
       const items = Array.isArray(data) ? data : [data]
       return items.filter(Boolean).map(adaptReview)
+    },
+
+    /** レビュー操作履歴 */
+    getHistory: async (projectId: string, taskId: string): Promise<ReviewHistory[]> => {
+      const { data } = await http.get(`/projects/${projectId}/tasks/${taskId}/reviews/history/`)
+      return (data as ApiUser[]).map(h => ({
+        id: h.id,
+        review_id: h.review,
+        action: h.action,
+        user_id: h.user,
+        user_name: h.user_name ?? '',
+        created_at: h.created_at,
+      }))
     },
 
     /** レビューコメント一覧 */
@@ -394,6 +423,21 @@ export const api = {
     /** テンプレート削除 */
     delete: async (templateId: string): Promise<void> => {
       await http.delete(`/templates/${templateId}/`)
+    },
+  },
+
+  excel: {
+    /** Excel ダウンロード（WBS / 直近のタスク / 進捗一覧 の 3 シート） */
+    export: async (
+      projectId: string,
+      params: { quarter_id?: string; start_date?: string; end_date?: string },
+    ): Promise<Blob> => {
+      const { data } = await http.post(
+        `/projects/${projectId}/export/excel/`,
+        params,
+        { responseType: 'blob' },
+      )
+      return data as Blob
     },
   },
 

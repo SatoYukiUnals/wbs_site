@@ -20,12 +20,16 @@ const isLoading = ref(true)
 const newComment = ref('')
 
 onMounted(async () => {
-  const reviews = await api.reviews.list(projectId, taskId)
+  const [reviews, hist] = await Promise.all([
+    api.reviews.list(projectId, taskId),
+    api.reviews.getHistory(projectId, taskId),
+  ])
   if (reviews.length > 0) {
     review.value = reviews[0]
     currentStatus.value = reviews[0].status
     comments.value = await api.reviews.getComments(projectId, taskId, reviews[0].id)
   }
+  history.value = hist
   isLoading.value = false
 })
 

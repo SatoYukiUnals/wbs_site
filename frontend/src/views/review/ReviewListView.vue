@@ -1,15 +1,19 @@
 <script setup lang="ts">
 // 08-01-00 レビュー一覧画面
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
+import { api } from '@/api'
 import type { Review, ReviewStatus } from '@/types'
 
 const route = useRoute()
 const projectId = route.params.projectId as string
 
-// プロジェクト単位のレビュー一覧エンドポイントは現在未実装のため空状態
 const reviews = ref<Review[]>([])
 const filterStatus = ref<ReviewStatus | ''>('')
+
+onMounted(async () => {
+  reviews.value = await api.reviews.listByProject(projectId)
+})
 
 const filteredReviews = computed<Review[]>(() =>
   filterStatus.value
@@ -56,7 +60,6 @@ const statusColor = (status: ReviewStatus): string => {
         id="review_list__status_select"
         v-model="filterStatus"
         class="border border-gray-300 rounded px-3 py-1.5 text-sm"
-        @change="applyFilter"
       >
         <option value="">ステータス：全て</option>
         <option value="pending">レビュー待ち</option>

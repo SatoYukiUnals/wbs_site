@@ -125,11 +125,12 @@ class ReviewSerializer(serializers.ModelSerializer):
 
     comments = ReviewCommentSerializer(many=True, read_only=True)
     reviewer_name = serializers.CharField(source='reviewer.username', read_only=True)
+    task_title = serializers.CharField(source='task.title', read_only=True)
 
     class Meta:
         model = Review
         fields = [
-            'id', 'task', 'reviewer', 'reviewer_name',
+            'id', 'task', 'task_title', 'reviewer', 'reviewer_name',
             'status', 'created_at', 'comments',
         ]
         read_only_fields = ['id', 'task', 'created_at']

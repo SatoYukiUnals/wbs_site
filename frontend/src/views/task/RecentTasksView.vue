@@ -128,7 +128,12 @@ const formatDate = (d: string | null) => d ? d.replace(/-/g, '/') : '—'
 
 <template>
   <div id="recent_tasks__container">
-    <h1 class="text-xl font-bold text-sky-900 mb-4">直近のタスク</h1>
+    <div class="flex items-center gap-3 mb-4">
+      <router-link :to="`/projects/${projectId}`" class="text-blue-600 hover:underline text-sm">
+        ← プロジェクト詳細
+      </router-link>
+      <h1 class="text-xl font-bold text-sky-900">直近のタスク</h1>
+    </div>
 
     <!-- フィルタ -->
     <div id="recent_tasks__filter_area" class="bg-white rounded-lg shadow px-4 py-3 mb-4 flex flex-wrap gap-4 items-end">

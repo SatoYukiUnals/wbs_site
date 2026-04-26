@@ -42,6 +42,7 @@ const getActualTasks = (t: Task): Task[] => {
 // ノード集計
 // =============================================================
 type NodeStats = {
+  task_id: string
   wbs_no: string
   title: string
   depth: number
@@ -102,6 +103,7 @@ const calcStats = (node: Task): NodeStats => {
   }
 
   return {
+    task_id: node.id,
     wbs_no: node.wbs_no,
     title: node.title,
     depth: node.depth,
@@ -178,7 +180,12 @@ const fmtDelay = (h: number): string => {
 
 <template>
   <div id="progress_list__container">
-    <h1 class="text-xl font-bold text-sky-900 mb-4">進捗一覧</h1>
+    <div class="flex items-center gap-3 mb-4">
+      <router-link :to="`/projects/${projectId}`" class="text-blue-600 hover:underline text-sm">
+        ← プロジェクト詳細
+      </router-link>
+      <h1 class="text-xl font-bold text-sky-900">進捗一覧</h1>
+    </div>
 
     <div class="bg-white rounded-lg shadow overflow-x-auto overflow-y-auto border border-gray-500 max-h-[calc(100vh-160px)]">
       <table id="progress_list__table" class="text-xs border-separate border-spacing-0 w-max min-w-full">
@@ -225,7 +232,10 @@ const fmtDelay = (h: number): string => {
             <td class="border-b border-r border-gray-500 px-3 py-1.5 text-sky-900 sticky z-10 min-w-[200px]"
                 :class="depthRowClass(row.depth)"
                 style="left: 72px">
-              {{ INDENT[row.depth] }}{{ row.title }}
+              {{ INDENT[row.depth] }}<router-link
+                :to="`/projects/${projectId}/tasks/${row.task_id}`"
+                class="hover:underline hover:text-blue-600"
+              >{{ row.title }}</router-link>
             </td>
             <!-- 時間系 -->
             <td class="border-b border-r border-gray-500 px-3 py-1.5 text-right text-sky-900 whitespace-nowrap">{{ fmtH(row.total_h) }}</td>

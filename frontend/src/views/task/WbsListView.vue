@@ -37,6 +37,22 @@ onMounted(async () => {
   if (currentQuarter) filterQuarter.value = currentQuarter.id
 })
 
+/** wbs_no を数値配列として比較する（"1.10" が "1.9" より大になるよう対処） */
+const wbsCompare = (a: string, b: string): number => {
+  const ap = a.split('.').map(Number)
+  const bp = b.split('.').map(Number)
+  for (let i = 0; i < Math.max(ap.length, bp.length); i++) {
+    const diff = (ap[i] ?? 0) - (bp[i] ?? 0)
+    if (diff !== 0) return diff
+  }
+  return 0
+}
+
+const taskSort = (a: Task, b: Task): number => {
+  const od = a.sort_order - b.sort_order
+  return od !== 0 ? od : wbsCompare(a.wbs_no, b.wbs_no)
+}
+
 const filteredTasks = computed(() =>
   rootTasks.value
     .filter(t => {
@@ -45,12 +61,12 @@ const filteredTasks = computed(() =>
       if (filterQuarter.value && t.quarter_id !== filterQuarter.value) return false
       return true
     })
-    .sort((a, b) => a.sort_order - b.sort_order)
+    .sort(taskSort)
 )
 
-/** 子タスクを sort_order 順に返す */
+/** 子タスクを sort_order → wbs_no 順に返す */
 const sortedChildren = (task: Task): Task[] =>
-  [...(task.children ?? [])].sort((a, b) => a.sort_order - b.sort_order)
+  [...(task.children ?? [])].sort(taskSort)
 
 /** 全子が完了済みかどうか（初期折り畳み判定用） */
 const allChildrenDone = (t: Task): boolean =>
@@ -481,9 +497,12 @@ const findTaskById = (tasks: Task[], id: string): Task | undefined => {
 /** 削除ダイアログ */
 const showDeleteDialog = ref(false)
 const deleteTargetId = ref('')
-const handleDelete = () => {
-  rootTasks.value = rootTasks.value.filter(t => t.id !== deleteTargetId.value)
+const handleDelete = async () => {
+  await api.tasks.delete(projectId, deleteTargetId.value)
   showDeleteDialog.value = false
+  const tasks = await api.tasks.list(projectId)
+  rootTasks.value = tasks
+  expandedIds.value = new Set(allTaskIds())
 }
 
 // =====================================================================
@@ -491,16 +510,39 @@ const handleDelete = () => {
 // =====================================================================
 const showBulkDialog = ref(false)
 const bulkText = ref('')
+const bulkParentId = ref<string | null>(null)
+const bulkParentTitle = ref<string | null>(null)
+const bulkTaskType = ref<'task' | 'item'>('task')
 
 const bulkPreview = computed(() =>
   bulkText.value.split('\n').map(l => l.trim()).filter(l => l.length > 0)
 )
 
+const openBulkDialog = (parentId?: string, parentTitle?: string) => {
+  bulkParentId.value = parentId ?? null
+  bulkParentTitle.value = parentTitle ?? null
+  bulkText.value = ''
+  showBulkDialog.value = true
+}
+
+const closeBulkDialog = () => {
+  showBulkDialog.value = false
+  bulkText.value = ''
+  bulkParentId.value = null
+  bulkParentTitle.value = null
+  bulkTaskType.value = 'task'
+}
+
 const handleBulkAdd = async () => {
   if (bulkPreview.value.length === 0) return
-  await api.tasks.bulkCreate(projectId, bulkPreview.value, filterQuarter.value || undefined)
-  bulkText.value = ''
-  showBulkDialog.value = false
+  await api.tasks.bulkCreate(
+    projectId,
+    bulkPreview.value,
+    filterQuarter.value || undefined,
+    bulkParentId.value ?? undefined,
+    bulkTaskType.value,
+  )
+  closeBulkDialog()
   const tasks = await api.tasks.list(projectId)
   rootTasks.value = tasks
   expandedIds.value = new Set(allTaskIds())
@@ -577,7 +619,7 @@ onMounted(() => {
         <button v-if="isAdmin"
           id="wbs_list__add_task_btn"
           class="bg-blue-600 text-white px-3 py-1.5 rounded text-sm transition-colors hover:bg-blue-700"
-          @click="showBulkDialog = true">
+          @click="openBulkDialog()">
           タスク追加
         </button>
       </div>
@@ -697,6 +739,13 @@ onMounted(() => {
                 {{ formatHours(itemHours(task)) }}
               </td>
               <td v-if="show('op')" :class="['sticky z-10 border-r border-b border-gray-500 px-2 py-2 whitespace-nowrap overflow-hidden', isActiveToday(task) ? 'bg-amber-50 group-hover:bg-amber-100' : 'bg-white group-hover:bg-gray-50']" :style="{ left: colLeft.op + 'px' }">
+                <button v-if="isAdmin"
+                  class="rounded hover:bg-green-100 hover:text-green-600 transition-colors w-5 h-5 inline-flex items-center justify-center text-sky-900"
+                  title="子タスクを追加" @click="openBulkDialog(task.id, task.title)">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd"/>
+                  </svg>
+                </button>
                 <router-link v-if="task.task_kind === 'レビュー依頼'"
                   :to="`/projects/${projectId}/tasks/${task.id}/reviews`"
                   class="rounded hover:bg-yellow-100 hover:text-yellow-600 transition-colors w-5 h-5 inline-flex items-center justify-center text-sky-900 ml-1"
@@ -785,6 +834,13 @@ onMounted(() => {
                     {{ formatHours(itemHours(child)) }}
                   </td>
                   <td v-if="show('op')" :class="['sticky z-10 border-r border-b border-gray-500 px-2 py-2 whitespace-nowrap overflow-hidden', isActiveToday(child) ? 'bg-amber-50 group-hover:bg-amber-100' : 'bg-gray-50 group-hover:bg-gray-100']" :style="{ left: colLeft.op + 'px' }">
+                    <button v-if="isAdmin"
+                      class="rounded hover:bg-green-100 hover:text-green-600 transition-colors w-5 h-5 inline-flex items-center justify-center text-sky-900"
+                      title="子タスクを追加" @click="openBulkDialog(child.id, child.title)">
+                      <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd"/>
+                      </svg>
+                    </button>
                     <router-link :to="`/projects/${projectId}/tasks/${child.id}`"
                       class="rounded hover:bg-blue-100 hover:text-blue-500 transition-colors w-5 h-5 inline-flex items-center justify-center text-sky-900 ml-1"
                       title="編集">
@@ -919,7 +975,18 @@ onMounted(() => {
     <!-- ========== タスク追加ダイアログ（一括追加） ========== -->
     <div v-if="showBulkDialog" id="wbs_list__bulk_dialog" class="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
       <div class="bg-white rounded-lg shadow-lg p-6 w-[480px]">
-        <h2 class="text-base font-semibold mb-2">タスクを一括追加</h2>
+        <h2 class="text-base font-semibold mb-1">タスクを一括追加</h2>
+        <p v-if="bulkParentTitle" class="text-xs text-blue-600 mb-2">親：{{ bulkParentTitle }}</p>
+        <div class="flex gap-4 mb-3">
+          <label class="flex items-center gap-1.5 text-sm text-sky-900 cursor-pointer">
+            <input type="radio" v-model="bulkTaskType" value="task" />
+            タスク
+          </label>
+          <label class="flex items-center gap-1.5 text-sm text-sky-900 cursor-pointer">
+            <input type="radio" v-model="bulkTaskType" value="item" />
+            親項目
+          </label>
+        </div>
         <p class="text-xs text-sky-900 mb-3">1行に1つのタスク名を入力してください。空行は無視されます。</p>
         <textarea id="wbs_list__bulk_textarea" v-model="bulkText" rows="8"
           placeholder="例）&#10;要件定義&#10;基本設計&#10;詳細設計"
@@ -928,7 +995,7 @@ onMounted(() => {
         <div class="mt-2 text-xs text-sky-900">{{ bulkPreview.length }} 件追加されます</div>
         <div class="flex justify-end gap-2 mt-4">
           <button id="wbs_list__bulk_cancel_btn" class="px-4 py-2 text-sm text-gray-600 border rounded transition-colors hover:bg-gray-100"
-            @click="showBulkDialog = false; bulkText = ''">キャンセル</button>
+            @click="closeBulkDialog">キャンセル</button>
           <button id="wbs_list__bulk_submit_btn" :disabled="bulkPreview.length === 0"
             class="px-4 py-2 text-sm text-white bg-blue-600 rounded transition-colors hover:bg-blue-700 disabled:opacity-50"
             @click="handleBulkAdd">{{ bulkPreview.length }} 件追加</button>

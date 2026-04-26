@@ -1,2 +1,23 @@
 # Claude Code 関連ファイル（ローカル作業用、リポジトリ管理対象外）
 .claude/
+
+# 環境変数（認証情報を含むためコミット禁止）
+.env
+.env.local
+.env.*.local
+
+# フロントエンドビルド成果物
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Python
+backend/__pycache__/
+backend/*.pyc
+backend/*.pyo
+backend/.pytest_cache/
+backend/venv/
+backend/.venv/
+
+# ログ
+*.log

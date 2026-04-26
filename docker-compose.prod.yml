@@ -1,0 +1,87 @@
+# =====================================================================
+# 本番用 Docker Compose
+#
+# 起動方法：
+#   cp .env.example .env  # 環境変数を設定
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# アクセス：http://<サーバーIP>/
+# =====================================================================
+
+services:
+  # ------------------------------------------------------------------
+  # データベース（PostgreSQL 16）
+  # ------------------------------------------------------------------
+  db:
+    image: postgres:16-alpine
+    container_name: wbs_db
+    restart: always
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - backend_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ------------------------------------------------------------------
+  # バックエンド（Django + Gunicorn）
+  # ※ 実装②フェーズで有効化
+  # ------------------------------------------------------------------
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: wbs_backend
+    restart: always
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      SECRET_KEY: ${DJANGO_SECRET_KEY}
+      DEBUG: "False"
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}
+      GUNICORN_WORKERS: ${GUNICORN_WORKERS:-3}
+    volumes:
+      - static_volume:/app/staticfiles
+      - media_volume:/app/media
+    networks:
+      - backend_net
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # ------------------------------------------------------------------
+  # フロントエンド（Vue.js ビルド済み → Nginx）
+  # リバースプロキシ兼静的ファイル配信サーバーを兼務
+  # ------------------------------------------------------------------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: wbs_frontend
+    restart: always
+    ports:
+      - "80:80"
+    volumes:
+      # Django collectstatic の成果物を Nginx から配信
+      - static_volume:/static:ro
+      - media_volume:/media:ro
+    networks:
+      - backend_net
+    depends_on:
+      - backend
+
+networks:
+  backend_net:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  static_volume:
+  media_volume:

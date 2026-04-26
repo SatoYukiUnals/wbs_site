@@ -112,6 +112,7 @@ sequenceDiagram
 | 2 | 終了日 | 開始日より後 | |
 | 3 | 階層 | 最大5層（第6層以降は作成不可） | 親タスクのdepthを再帰カウント |
 | 4 | 担当者 | 同プロジェクトメンバーのみ | |
+| 5 | task_kind | task_type='task' の場合のみ設定可。選択肢：実装 / ドキュメント作成 / レビュー依頼 / レビュー修正 | NULL許容 |
 
 ### 6.2 登録内容（What）
 
@@ -119,10 +120,11 @@ sequenceDiagram
 | :--- | :--- | :--- | :--- |
 | 1 | task.title | 入力値 | |
 | 2 | task.parent_task_id | 指定した親タスクのID / NULL | |
-| 3 | task.status | 'unstarted'（初期値） | |
+| 3 | task.status | `'Todo'`（初期値） | |
 | 4 | task.priority | 入力値（高/中/低） | |
 | 5 | task.start_date / end_date | 入力値 | |
-| 6 | task_assignee.user_id | 担当者分 | |
+| 6 | task.task_kind | 入力値 / NULL | task_type='task' の場合のみ設定。実装 / ドキュメント作成 / レビュー依頼 / レビュー修正 |
+| 7 | task_assignee.user_id | 担当者分 | |
 
 ### 6.3 処理制御（How）
 
@@ -138,15 +140,16 @@ sequenceDiagram
 | タスク一括作成API | `POST` | 複数タスクを一括作成 |
 | タスク詳細API | `GET` | タスク詳細情報取得 |
 | タスク全項目編集API | `PUT` | 全項目を更新（admin以上） |
-| タスク部分編集API | `PATCH` | ステータス・進捗率を更新（member） |
+| タスク部分編集API | `PATCH` | ステータスを更新（member） |
 | タスク削除API | `DELETE` | 子タスク含む論理削除 |
 | タスク並び替えAPI | `PATCH` | order値の更新 |
 | 担当者追加API | `POST` | 担当者を追加 |
 | 担当者削除API | `DELETE` | 担当者を除外 |
+| 直近のタスク一覧API | `GET` | 期限切れ・今週開始予定・着手中のタスクを集計して返却 |
 
 ## 8. テーブル概要
 
 | テーブル名 | カラム名 | 操作 | 備考 |
 | :--- | :--- | :--- | :--- |
-| task | id, title, description, parent_task_id, project_id, quarter_id, status, priority, progress, start_date, end_date, order, deleted_at | INSERT / SELECT / UPDATE | 自己参照で階層を表現 |
+| task | id, title, description, parent_task_id, project_id, quarter_id, status（Todo/InProgress/InReview/Done/OnHold）, task_kind（実装/ドキュメント作成/レビュー依頼/レビュー修正, NULL許容）, priority, progress, start_date, end_date, actual_start_date, actual_end_date, order, deleted_at | INSERT / SELECT / UPDATE | 自己参照で階層を表現 |
 | task_assignee | id, task_id, user_id | INSERT / SELECT / DELETE | |

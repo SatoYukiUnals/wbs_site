@@ -1,0 +1,28 @@
+# =====================================================================
+# Python 依存パッケージ
+# ※ バックエンド実装フェーズ（実装②）でバージョンを確定する
+# =====================================================================
+
+# Django コア
+Django==4.2.*
+djangorestframework==3.15.*
+djangorestframework-simplejwt==5.3.*
+django-cors-headers==4.3.*
+
+# データベース
+psycopg2-binary==2.9.*
+
+# 環境変数管理
+python-decouple==3.8
+
+# ファイル生成
+openpyxl==3.1.*
+weasyprint==62.*
+
+# 本番サーバー
+gunicorn==22.*
+
+# 開発・テスト用
+pytest==8.*
+pytest-django==4.*
+factory-boy==3.*

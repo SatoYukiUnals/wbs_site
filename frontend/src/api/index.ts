@@ -268,8 +268,8 @@ export const api = {
 
   tasks: {
     /** タスクツリー（ルートのみ、children に子を再帰的に含む） */
-    list: async (projectId: string): Promise<Task[]> => {
-      const { data } = await http.get(`/projects/${projectId}/tasks/`)
+    list: async (projectId: string, params?: { status?: string; assignee?: string; quarter?: string }): Promise<Task[]> => {
+      const { data } = await http.get(`/projects/${projectId}/tasks/`, { params })
       return (data as ApiTask[]).map(adaptTask)
     },
 
@@ -300,6 +300,16 @@ export const api = {
     /** タスク削除 */
     delete: async (projectId: string, taskId: string): Promise<void> => {
       await http.delete(`/projects/${projectId}/tasks/${taskId}/`)
+    },
+
+    /** 担当者を追加する */
+    addAssignee: async (projectId: string, taskId: string, userId: string): Promise<void> => {
+      await http.post(`/projects/${projectId}/tasks/${taskId}/assignees/`, { user_id: userId })
+    },
+
+    /** 担当者を削除する */
+    removeAssignee: async (projectId: string, taskId: string, userId: string): Promise<void> => {
+      await http.delete(`/projects/${projectId}/tasks/${taskId}/assignees/${userId}/`)
     },
   },
 

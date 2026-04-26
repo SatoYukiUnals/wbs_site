@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // 04-01-00 WBS一覧画面（WBSリスト + ガントチャート統合）
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { api } from '@/api'
@@ -19,23 +19,223 @@ const members = ref<ProjectMember[]>([])
 const quarters = ref<Quarter[]>([])
 
 const rootTasks = ref<Task[]>([])
+const isUpdating = ref(false)
+
+// =====================================================================
+// 編集モード
+// =====================================================================
+type TaskDraft = {
+  start_date: string | null
+  end_date: string | null
+  estimated_hours: number | null
+  assigneeIds: string[]
+  sort_order: number
+}
+
+const isEditMode = ref(false)
+const isSaving = ref(false)
+const draftMap = ref(new Map<string, TaskDraft>())
+const assigneePopoverId = ref<string | null>(null)
+
+const enterEditMode = () => {
+  const snapshot = (tasks: Task[]) => {
+    for (const t of tasks) {
+      draftMap.value.set(t.id, {
+        start_date: t.start_date,
+        end_date: t.end_date,
+        estimated_hours: t.estimated_hours,
+        assigneeIds: t.assignees.map(a => a.id),
+        sort_order: t.sort_order,
+      })
+      if (t.children) snapshot(t.children)
+    }
+  }
+  snapshot(rootTasks.value)
+  isEditMode.value = true
+}
+
+const cancelEditMode = () => {
+  const restore = (tasks: Task[]) => {
+    for (const t of tasks) {
+      const draft = draftMap.value.get(t.id)
+      if (draft) {
+        t.start_date = draft.start_date
+        t.end_date = draft.end_date
+        t.estimated_hours = draft.estimated_hours
+        t.assignees = draft.assigneeIds.map(id => ({
+          id,
+          name: members.value.find(m => m.user_id === id)?.user_name ?? '',
+        }))
+        t.sort_order = draft.sort_order
+      }
+      if (t.children) restore(t.children)
+    }
+  }
+  restore(rootTasks.value)
+  draftMap.value.clear()
+  assigneePopoverId.value = null
+  isEditMode.value = false
+}
+
+/** 対象タスクの兄弟リストを返す */
+const getSiblings = (taskId: string): Task[] | null => {
+  const rootIdx = rootTasks.value.findIndex(t => t.id === taskId)
+  if (rootIdx !== -1) return rootTasks.value
+  for (const root of rootTasks.value) {
+    const childIdx = (root.children ?? []).findIndex(c => c.id === taskId)
+    if (childIdx !== -1) return root.children!
+    for (const child of root.children ?? []) {
+      const grandIdx = (child.children ?? []).findIndex(g => g.id === taskId)
+      if (grandIdx !== -1) return child.children!
+    }
+  }
+  return null
+}
+
+/** sort_order 変更を computed に確実に伝えるためのカウンター */
+const sortVersion = ref(0)
+
+const moveSibling = (taskId: string, dir: 'up' | 'down') => {
+  const siblings = getSiblings(taskId)
+  if (!siblings) return
+  const sorted = [...siblings].sort(taskSort)
+  const idx = sorted.findIndex(t => t.id === taskId)
+  const swapIdx = dir === 'up' ? idx - 1 : idx + 1
+  if (swapIdx < 0 || swapIdx >= sorted.length) return
+  const a = sorted[idx], b = sorted[swapIdx]
+  const tmp = a.sort_order
+  a.sort_order = b.sort_order
+  b.sort_order = tmp
+  sortVersion.value++
+}
+
+const canMoveUp = (taskId: string): boolean => {
+  const siblings = getSiblings(taskId)
+  if (!siblings) return false
+  const sorted = [...siblings].sort(taskSort)
+  return sorted[0]?.id !== taskId
+}
+
+const canMoveDown = (taskId: string): boolean => {
+  const siblings = getSiblings(taskId)
+  if (!siblings) return false
+  const sorted = [...siblings].sort(taskSort)
+  return sorted[sorted.length - 1]?.id !== taskId
+}
+
+const toggleDraftAssignee = (task: Task, userId: string) => {
+  const idx = task.assignees.findIndex(a => a.id === userId)
+  if (idx === -1) {
+    const member = members.value.find(m => m.user_id === userId)
+    if (member) task.assignees.push({ id: userId, name: member.user_name })
+  } else {
+    task.assignees.splice(idx, 1)
+  }
+}
+
+const draftAssigneeNames = (task: Task): string =>
+  task.assignees.map(a => a.name).join(', ') || '—'
+
+const saveEditMode = async () => {
+  isSaving.value = true
+  try {
+    const allTasks: Task[] = []
+    const collect = (tasks: Task[]) => {
+      for (const t of tasks) {
+        allTasks.push(t)
+        if (t.children) collect(t.children)
+      }
+    }
+    collect(rootTasks.value)
+
+    const promises: Promise<unknown>[] = []
+    for (const task of allTasks) {
+      const draft = draftMap.value.get(task.id)
+      if (!draft) continue
+
+      const fieldChanged =
+        task.start_date !== draft.start_date ||
+        task.end_date !== draft.end_date ||
+        task.estimated_hours !== draft.estimated_hours ||
+        task.sort_order !== draft.sort_order
+
+      if (fieldChanged) {
+        promises.push(api.tasks.update(projectId, task.id, {
+          start_date: task.start_date,
+          end_date: task.end_date,
+          estimated_hours: task.estimated_hours,
+          order: task.sort_order,
+        }))
+      }
+
+      const added = task.assignees.map(a => a.id).filter(id => !draft.assigneeIds.includes(id))
+      const removed = draft.assigneeIds.filter(id => !task.assignees.find(a => a.id === id))
+      for (const uid of added)   promises.push(api.tasks.addAssignee(projectId, task.id, uid))
+      for (const uid of removed) promises.push(api.tasks.removeAssignee(projectId, task.id, uid))
+    }
+
+    await Promise.all(promises)
+    await fetchTasks()
+    draftMap.value.clear()
+    isEditMode.value = false
+  } finally {
+    isSaving.value = false
+  }
+}
+
+/** ステータス変更 → API 更新（楽観的更新・失敗時ロールバック） */
+const handleStatusChange = async (task: Task, newStatus: TaskStatus) => {
+  const oldStatus = task.status
+  task.status = newStatus
+  isUpdating.value = true
+  try {
+    await api.tasks.update(projectId, task.id, { status: newStatus })
+  } catch {
+    task.status = oldStatus
+  } finally {
+    isUpdating.value = false
+  }
+}
+
+/** フィルター条件をクエリパラメータとしてAPIに渡してタスクを再取得する */
+const isLoadingTasks = ref(false)
+
+/** フィルター条件をクエリパラメータとしてAPIに渡してタスクを再取得する（最低0.5秒ローディング表示） */
+const fetchTasks = async () => {
+  isLoadingTasks.value = true
+  try {
+    const params: Record<string, string> = {}
+    if (filterStatus.value)   params.status   = filterStatus.value
+    if (filterAssignee.value) params.assignee = filterAssignee.value
+    if (filterQuarter.value)  params.quarter  = filterQuarter.value
+    const [tasks] = await Promise.all([
+      api.tasks.list(projectId, params),
+      new Promise(resolve => setTimeout(resolve, 500)),
+    ])
+    rootTasks.value = tasks
+    expandedIds.value = new Set(allTaskIds())
+  } finally {
+    isLoadingTasks.value = false
+  }
+}
 
 onMounted(async () => {
-  const [tasks, m, q] = await Promise.all([
-    api.tasks.list(projectId),
+  const [m, q] = await Promise.all([
     api.projects.listMembers(projectId),
     api.quarters.list(projectId),
   ])
-  rootTasks.value = tasks
   members.value = m
   quarters.value = q
-  expandedIds.value = new Set(allTaskIds())
 
-  // 今日の日付が含まれるクォーターを初期選択する
+  // 今日の日付が含まれるクォーターを初期選択する（watchより先に設定してから一度だけ取得）
   const today = new Date().toISOString().slice(0, 10)
   const currentQuarter = q.find(qt => qt.start_date <= today && today <= qt.end_date)
   if (currentQuarter) filterQuarter.value = currentQuarter.id
+
+  await fetchTasks()
 })
+
+watch([filterStatus, filterAssignee, filterQuarter], fetchTasks)
 
 /** wbs_no を数値配列として比較する（"1.10" が "1.9" より大になるよう対処） */
 const wbsCompare = (a: string, b: string): number => {
@@ -53,20 +253,16 @@ const taskSort = (a: Task, b: Task): number => {
   return od !== 0 ? od : wbsCompare(a.wbs_no, b.wbs_no)
 }
 
-const filteredTasks = computed(() =>
-  rootTasks.value
-    .filter(t => {
-      if (filterStatus.value && t.status !== filterStatus.value) return false
-      if (filterAssignee.value && !t.assignees.find(a => a.id === filterAssignee.value)) return false
-      if (filterQuarter.value && t.quarter_id !== filterQuarter.value) return false
-      return true
-    })
-    .sort(taskSort)
-)
+const filteredTasks = computed(() => {
+  void sortVersion.value
+  return [...rootTasks.value].sort(taskSort)
+})
 
 /** 子タスクを sort_order → wbs_no 順に返す */
-const sortedChildren = (task: Task): Task[] =>
-  [...(task.children ?? [])].sort(taskSort)
+const sortedChildren = (task: Task): Task[] => {
+  void sortVersion.value
+  return [...(task.children ?? [])].sort(taskSort)
+}
 
 /** 全子が完了済みかどうか（初期折り畳み判定用） */
 const allChildrenDone = (t: Task): boolean =>
@@ -500,9 +696,7 @@ const deleteTargetId = ref('')
 const handleDelete = async () => {
   await api.tasks.delete(projectId, deleteTargetId.value)
   showDeleteDialog.value = false
-  const tasks = await api.tasks.list(projectId)
-  rootTasks.value = tasks
-  expandedIds.value = new Set(allTaskIds())
+  await fetchTasks()
 }
 
 // =====================================================================
@@ -543,9 +737,7 @@ const handleBulkAdd = async () => {
     bulkTaskType.value,
   )
   closeBulkDialog()
-  const tasks = await api.tasks.list(projectId)
-  rootTasks.value = tasks
-  expandedIds.value = new Set(allTaskIds())
+  await fetchTasks()
 }
 
 /** 初期表示時：ガントの今日列が左端付近に来るようスクロール */
@@ -604,24 +796,48 @@ onMounted(() => {
       </div>
 
       <div class="ml-auto flex gap-2">
-        <router-link :to="`/projects/${projectId}/auto-assign`"
-          class="border border-gray-300 text-sky-900 px-3 py-1.5 rounded text-sm transition-colors hover:bg-gray-100 hover:border-gray-400">
-          自動割り振り
-        </router-link>
-        <router-link :to="`/projects/${projectId}/reports`"
-          class="border border-gray-300 text-sky-900 px-3 py-1.5 rounded text-sm transition-colors hover:bg-gray-100 hover:border-gray-400">
-          報告書
-        </router-link>
-        <router-link :to="`/projects/${projectId}/export/excel`"
-          class="border border-gray-300 text-sky-900 px-3 py-1.5 rounded text-sm transition-colors hover:bg-gray-100 hover:border-gray-400">
-          Excel出力
-        </router-link>
-        <button v-if="isAdmin"
-          id="wbs_list__add_task_btn"
-          class="bg-blue-600 text-white px-3 py-1.5 rounded text-sm transition-colors hover:bg-blue-700"
-          @click="openBulkDialog()">
-          タスク追加
-        </button>
+        <template v-if="!isEditMode">
+          <router-link :to="`/projects/${projectId}/auto-assign`"
+            class="border border-gray-300 text-sky-900 px-3 py-1.5 rounded text-sm transition-colors hover:bg-gray-100 hover:border-gray-400">
+            自動割り振り
+          </router-link>
+          <router-link :to="`/projects/${projectId}/reports`"
+            class="border border-gray-300 text-sky-900 px-3 py-1.5 rounded text-sm transition-colors hover:bg-gray-100 hover:border-gray-400">
+            報告書
+          </router-link>
+          <router-link :to="`/projects/${projectId}/export/excel`"
+            class="border border-gray-300 text-sky-900 px-3 py-1.5 rounded text-sm transition-colors hover:bg-gray-100 hover:border-gray-400">
+            Excel出力
+          </router-link>
+          <button v-if="isAdmin"
+            id="wbs_list__add_task_btn"
+            class="bg-blue-600 text-white px-3 py-1.5 rounded text-sm transition-colors hover:bg-blue-700"
+            @click="openBulkDialog()">
+            タスク追加
+          </button>
+          <button v-if="isAdmin"
+            id="wbs_list__edit_mode_btn"
+            class="border border-gray-300 text-sky-900 px-3 py-1.5 rounded text-sm transition-colors hover:bg-gray-100"
+            @click="enterEditMode">
+            編集モード
+          </button>
+        </template>
+        <template v-else>
+          <button
+            id="wbs_list__save_btn"
+            :disabled="isSaving"
+            class="bg-blue-600 text-white px-3 py-1.5 rounded text-sm transition-colors hover:bg-blue-700 disabled:opacity-50"
+            @click="saveEditMode">
+            保存
+          </button>
+          <button
+            id="wbs_list__cancel_edit_btn"
+            :disabled="isSaving"
+            class="border border-gray-300 text-sky-900 px-3 py-1.5 rounded text-sm transition-colors hover:bg-gray-100 disabled:opacity-50"
+            @click="cancelEditMode">
+            キャンセル
+          </button>
+        </template>
       </div>
     </div>
 
@@ -712,61 +928,101 @@ onMounted(() => {
                 </div>
               </td>
               <td v-if="show('status')" :class="['sticky z-10 border-r border-b border-gray-500 px-2 py-2 overflow-hidden', isActiveToday(task) ? 'bg-amber-50 group-hover:bg-amber-100' : 'bg-white group-hover:bg-gray-50']" :style="{ left: colLeft.status + 'px' }">
-                <select v-if="task.task_type === 'task'" v-model="task.status" :class="statusClass(task.status)"
-                  class="border rounded-full px-2 py-0.5 text-xs cursor-pointer w-full" data-testid="status-select">
+                <select v-if="task.task_type === 'task' && !isEditMode" :value="task.status" :class="statusClass(task.status)"
+                  class="border rounded-full px-2 py-0.5 text-xs cursor-pointer w-full" data-testid="status-select"
+                  @change="handleStatusChange(task, ($event.target as HTMLSelectElement).value as TaskStatus)">
                   <option v-for="s in statusOptions" :key="s" :value="s" class="bg-white text-sky-900">{{ s }}</option>
                 </select>
+                <span v-else-if="task.task_type === 'task' && isEditMode" :class="statusClass(task.status)" class="px-2 py-0.5 rounded-full text-xs block text-center">{{ task.status }}</span>
                 <span v-else class="text-sky-900 text-xs whitespace-nowrap block text-center">
                   {{ childStats(task).completed }} / {{ childStats(task).total }}
                 </span>
               </td>
-              <td v-if="show('assignee')" :class="['sticky z-10 border-r border-b border-gray-500 px-3 py-2 text-xs overflow-hidden', isActiveToday(task) ? 'bg-amber-50 group-hover:bg-amber-100' : memberCellBgClasses(task) || 'bg-white group-hover:bg-gray-50']" :style="{ left: colLeft.assignee + 'px' }">
-                <div class="truncate">{{ task.assignees.map(a => a.name).join(', ') || '—' }}</div>
-                <div v-if="task.task_type === 'item' && (task.tm_reviewer || task.pj_reviewer)" class="text-[10px] text-sky-900 leading-snug">
-                  <span v-if="task.tm_reviewer">TM:{{ task.tm_reviewer.name }}</span>
-                  <span v-if="task.pj_reviewer" class="ml-1">PJ:{{ task.pj_reviewer.name }}</span>
+              <td v-if="show('assignee')" :class="['sticky border-r border-b border-gray-500 px-3 py-2 text-xs', isEditMode ? 'z-[60] overflow-visible' : 'z-10 overflow-hidden', isActiveToday(task) ? 'bg-amber-50 group-hover:bg-amber-100' : memberCellBgClasses(task) || 'bg-white group-hover:bg-gray-50']" :style="{ left: colLeft.assignee + 'px' }">
+                <div v-if="isEditMode" class="relative">
+                  <button class="text-xs truncate text-left w-full text-sky-900 hover:underline"
+                    @click="assigneePopoverId = assigneePopoverId === task.id ? null : task.id">
+                    {{ draftAssigneeNames(task) }}
+                  </button>
+                  <div v-if="assigneePopoverId === task.id"
+                    class="absolute left-0 top-full mt-1 bg-white border border-gray-300 rounded shadow-lg z-[200] py-1 min-w-[140px]">
+                    <label v-for="m in members" :key="m.user_id"
+                      class="flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-gray-50 cursor-pointer">
+                      <input type="checkbox"
+                        :checked="task.assignees.some(a => a.id === m.user_id)"
+                        @change="toggleDraftAssignee(task, m.user_id)" />
+                      {{ m.user_name }}
+                    </label>
+                  </div>
                 </div>
+                <template v-else>
+                  <div class="truncate">{{ task.assignees.map(a => a.name).join(', ') || '—' }}</div>
+                  <div v-if="task.task_type === 'item' && (task.tm_reviewer || task.pj_reviewer)" class="text-[10px] text-sky-900 leading-snug">
+                    <span v-if="task.tm_reviewer">TM:{{ task.tm_reviewer.name }}</span>
+                    <span v-if="task.pj_reviewer" class="ml-1">PJ:{{ task.pj_reviewer.name }}</span>
+                  </div>
+                </template>
               </td>
               <td v-if="show('start')" :class="['sticky z-10 border-r border-b border-gray-500 px-2 py-1 overflow-hidden', isActiveToday(task) ? 'bg-amber-50 group-hover:bg-amber-100' : 'bg-white group-hover:bg-gray-50']" :style="{ left: colLeft.start + 'px' }">
-                <div class="text-xs">{{ formatDate(itemStartDate(task)) }}</div>
-                <div v-if="task.task_type === 'task'" class="text-[10px] text-sky-900 leading-snug">{{ formatDate(task.actual_start_date) }}</div>
+                <template v-if="isEditMode && task.task_type === 'task'">
+                  <input type="date" v-model="task.start_date" class="border border-gray-300 rounded px-1 py-0.5 text-xs w-full" />
+                </template>
+                <template v-else>
+                  <div class="text-xs">{{ formatDate(itemStartDate(task)) }}</div>
+                  <div v-if="task.task_type === 'task'" class="text-[10px] text-sky-900 leading-snug">{{ formatDate(task.actual_start_date) }}</div>
+                </template>
               </td>
               <td v-if="show('end')" :class="['sticky z-10 border-r border-b border-gray-500 px-2 py-1 overflow-hidden', isActiveToday(task) ? 'bg-amber-50 group-hover:bg-amber-100' : 'bg-white group-hover:bg-gray-50']" :style="{ left: colLeft.end + 'px' }">
-                <div class="text-xs">{{ formatDate(itemEndDate(task)) }}</div>
-                <div v-if="task.task_type === 'task'" class="text-[10px] text-sky-900 leading-snug">{{ formatDate(task.actual_end_date) }}</div>
+                <template v-if="isEditMode && task.task_type === 'task'">
+                  <input type="date" v-model="task.end_date" class="border border-gray-300 rounded px-1 py-0.5 text-xs w-full" />
+                </template>
+                <template v-else>
+                  <div class="text-xs">{{ formatDate(itemEndDate(task)) }}</div>
+                  <div v-if="task.task_type === 'task'" class="text-[10px] text-sky-900 leading-snug">{{ formatDate(task.actual_end_date) }}</div>
+                </template>
               </td>
               <td v-if="show('hours')" :class="['sticky z-10 border-r border-b border-gray-500 px-3 py-2 text-xs text-right overflow-hidden', isActiveToday(task) ? 'bg-amber-50 group-hover:bg-amber-100' : 'bg-white group-hover:bg-gray-50']" :style="{ left: colLeft.hours + 'px' }">
-                {{ formatHours(itemHours(task)) }}
+                <input v-if="isEditMode && task.task_type === 'task'" type="number" step="0.5" min="0"
+                  :value="task.estimated_hours ?? ''"
+                  @change="task.estimated_hours = ($event.target as HTMLInputElement).value ? parseFloat(($event.target as HTMLInputElement).value) : null"
+                  class="border border-gray-300 rounded px-1 py-0.5 text-xs w-full text-right" />
+                <span v-else>{{ formatHours(itemHours(task)) }}</span>
               </td>
               <td v-if="show('op')" :class="['sticky z-10 border-r border-b border-gray-500 px-2 py-2 whitespace-nowrap overflow-hidden', isActiveToday(task) ? 'bg-amber-50 group-hover:bg-amber-100' : 'bg-white group-hover:bg-gray-50']" :style="{ left: colLeft.op + 'px' }">
-                <button v-if="isAdmin"
-                  class="rounded hover:bg-green-100 hover:text-green-600 transition-colors w-5 h-5 inline-flex items-center justify-center text-sky-900"
-                  title="子タスクを追加" @click="openBulkDialog(task.id, task.title)">
-                  <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
-                    <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd"/>
-                  </svg>
-                </button>
-                <router-link v-if="task.task_kind === 'レビュー依頼'"
-                  :to="`/projects/${projectId}/tasks/${task.id}/reviews`"
-                  class="rounded hover:bg-yellow-100 hover:text-yellow-600 transition-colors w-5 h-5 inline-flex items-center justify-center text-sky-900 ml-1"
-                  title="レビュー">
-                  <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
-                    <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/><path fill-rule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm9.707 5.707a1 1 0 00-1.414-1.414L9 12.586l-1.293-1.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
-                  </svg>
-                </router-link>
-                <router-link :to="`/projects/${projectId}/tasks/${task.id}`"
-                  class="rounded hover:bg-blue-100 hover:text-blue-500 transition-colors w-5 h-5 inline-flex items-center justify-center text-sky-900 ml-1"
-                  title="編集">
-                  <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
-                    <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/>
-                  </svg>
-                </router-link>
-                <button class="rounded hover:bg-red-100 hover:text-red-500 transition-colors w-5 h-5 inline-flex items-center justify-center text-sky-900 ml-1"
-                  title="削除" @click="deleteTargetId = task.id; showDeleteDialog = true">
-                  <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
-                    <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zm0 2h2l.5 1H8.5L9 4zM6 6h8v10H6V6zm2 2a1 1 0 00-1 1v4a1 1 0 102 0V9a1 1 0 00-1-1zm4 0a1 1 0 00-1 1v4a1 1 0 102 0V9a1 1 0 00-1-1z" clip-rule="evenodd"/>
-                  </svg>
-                </button>
+                <template v-if="isEditMode">
+                  <button :disabled="!canMoveUp(task.id)" class="w-5 h-5 rounded hover:bg-gray-100 disabled:opacity-30 text-sky-900 inline-flex items-center justify-center text-xs" @click="moveSibling(task.id, 'up')">↑</button>
+                  <button :disabled="!canMoveDown(task.id)" class="w-5 h-5 rounded hover:bg-gray-100 disabled:opacity-30 text-sky-900 inline-flex items-center justify-center text-xs ml-1" @click="moveSibling(task.id, 'down')">↓</button>
+                </template>
+                <template v-else>
+                  <button v-if="isAdmin"
+                    class="rounded hover:bg-green-100 hover:text-green-600 transition-colors w-5 h-5 inline-flex items-center justify-center text-sky-900"
+                    title="子タスクを追加" @click="openBulkDialog(task.id, task.title)">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
+                      <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd"/>
+                    </svg>
+                  </button>
+                  <router-link v-if="task.task_kind === 'レビュー依頼'"
+                    :to="`/projects/${projectId}/tasks/${task.id}/reviews`"
+                    class="rounded hover:bg-yellow-100 hover:text-yellow-600 transition-colors w-5 h-5 inline-flex items-center justify-center text-sky-900 ml-1"
+                    title="レビュー">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
+                      <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/><path fill-rule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm9.707 5.707a1 1 0 00-1.414-1.414L9 12.586l-1.293-1.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                    </svg>
+                  </router-link>
+                  <router-link :to="`/projects/${projectId}/tasks/${task.id}`"
+                    class="rounded hover:bg-blue-100 hover:text-blue-500 transition-colors w-5 h-5 inline-flex items-center justify-center text-sky-900 ml-1"
+                    title="編集">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
+                      <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/>
+                    </svg>
+                  </router-link>
+                  <button class="rounded hover:bg-red-100 hover:text-red-500 transition-colors w-5 h-5 inline-flex items-center justify-center text-sky-900 ml-1"
+                    title="削除" @click="deleteTargetId = task.id; showDeleteDialog = true">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
+                      <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zm0 2h2l.5 1H8.5L9 4zM6 6h8v10H6V6zm2 2a1 1 0 00-1 1v4a1 1 0 102 0V9a1 1 0 00-1-1zm4 0a1 1 0 00-1 1v4a1 1 0 102 0V9a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                    </svg>
+                  </button>
+                </template>
               </td>
               <!-- ガントセル（列ごと・上半分=予定 / 下半分=実績） -->
               <td v-for="(col, ci) in ganttCols" :key="col.key"
@@ -807,61 +1063,101 @@ onMounted(() => {
                     </div>
                   </td>
                   <td v-if="show('status')" :class="['sticky z-10 border-r border-b border-gray-500 px-2 py-2 overflow-hidden', isActiveToday(child) ? 'bg-amber-50 group-hover:bg-amber-100' : 'bg-gray-50 group-hover:bg-gray-100']" :style="{ left: colLeft.status + 'px' }">
-                    <select v-if="child.task_type === 'task'" v-model="child.status" :class="statusClass(child.status)"
-                      class="border rounded-full px-2 py-0.5 text-xs cursor-pointer w-full">
+                    <select v-if="child.task_type === 'task' && !isEditMode" :value="child.status" :class="statusClass(child.status)"
+                      class="border rounded-full px-2 py-0.5 text-xs cursor-pointer w-full"
+                      @change="handleStatusChange(child, ($event.target as HTMLSelectElement).value as TaskStatus)">
                       <option v-for="s in statusOptions" :key="s" :value="s" class="bg-white text-sky-900">{{ s }}</option>
                     </select>
+                    <span v-else-if="child.task_type === 'task' && isEditMode" :class="statusClass(child.status)" class="px-2 py-0.5 rounded-full text-xs block text-center">{{ child.status }}</span>
                     <span v-else class="text-sky-900 text-xs whitespace-nowrap block text-center">
                       {{ childStats(child).completed }} / {{ childStats(child).total }}
                     </span>
                   </td>
-                  <td v-if="show('assignee')" :class="['sticky z-10 border-r border-b border-gray-500 px-3 py-2 text-xs overflow-hidden', isActiveToday(child) ? 'bg-amber-50 group-hover:bg-amber-100' : memberCellBgClasses(child) || 'bg-gray-50 group-hover:bg-gray-100']" :style="{ left: colLeft.assignee + 'px' }">
-                    <div class="truncate">{{ child.assignees.map(a => a.name).join(', ') || '—' }}</div>
-                    <div v-if="child.task_type === 'item' && (child.tm_reviewer || child.pj_reviewer)" class="text-[10px] text-sky-900 leading-snug">
-                      <span v-if="child.tm_reviewer">TM:{{ child.tm_reviewer.name }}</span>
-                      <span v-if="child.pj_reviewer" class="ml-1">PJ:{{ child.pj_reviewer.name }}</span>
+                  <td v-if="show('assignee')" :class="['sticky border-r border-b border-gray-500 px-3 py-2 text-xs', isEditMode ? 'z-[60] overflow-visible' : 'z-10 overflow-hidden', isActiveToday(child) ? 'bg-amber-50 group-hover:bg-amber-100' : memberCellBgClasses(child) || 'bg-gray-50 group-hover:bg-gray-100']" :style="{ left: colLeft.assignee + 'px' }">
+                    <div v-if="isEditMode" class="relative">
+                      <button class="text-xs truncate text-left w-full text-sky-900 hover:underline"
+                        @click="assigneePopoverId = assigneePopoverId === child.id ? null : child.id">
+                        {{ draftAssigneeNames(child) }}
+                      </button>
+                      <div v-if="assigneePopoverId === child.id"
+                        class="absolute left-0 top-full mt-1 bg-white border border-gray-300 rounded shadow-lg z-[200] py-1 min-w-[140px]">
+                        <label v-for="m in members" :key="m.user_id"
+                          class="flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-gray-50 cursor-pointer">
+                          <input type="checkbox"
+                            :checked="child.assignees.some(a => a.id === m.user_id)"
+                            @change="toggleDraftAssignee(child, m.user_id)" />
+                          {{ m.user_name }}
+                        </label>
+                      </div>
                     </div>
+                    <template v-else>
+                      <div class="truncate">{{ child.assignees.map(a => a.name).join(', ') || '—' }}</div>
+                      <div v-if="child.task_type === 'item' && (child.tm_reviewer || child.pj_reviewer)" class="text-[10px] text-sky-900 leading-snug">
+                        <span v-if="child.tm_reviewer">TM:{{ child.tm_reviewer.name }}</span>
+                        <span v-if="child.pj_reviewer" class="ml-1">PJ:{{ child.pj_reviewer.name }}</span>
+                      </div>
+                    </template>
                   </td>
                   <td v-if="show('start')" :class="['sticky z-10 border-r border-b border-gray-500 px-2 py-1 overflow-hidden', isActiveToday(child) ? 'bg-amber-50 group-hover:bg-amber-100' : 'bg-gray-50 group-hover:bg-gray-100']" :style="{ left: colLeft.start + 'px' }">
-                    <div class="text-xs">{{ formatDate(itemStartDate(child)) }}</div>
-                    <div v-if="child.task_type === 'task'" class="text-[10px] text-sky-900 leading-snug">{{ formatDate(child.actual_start_date) }}</div>
+                    <template v-if="isEditMode && child.task_type === 'task'">
+                      <input type="date" v-model="child.start_date" class="border border-gray-300 rounded px-1 py-0.5 text-xs w-full" />
+                    </template>
+                    <template v-else>
+                      <div class="text-xs">{{ formatDate(itemStartDate(child)) }}</div>
+                      <div v-if="child.task_type === 'task'" class="text-[10px] text-sky-900 leading-snug">{{ formatDate(child.actual_start_date) }}</div>
+                    </template>
                   </td>
                   <td v-if="show('end')" :class="['sticky z-10 border-r border-b border-gray-500 px-2 py-1 overflow-hidden', isActiveToday(child) ? 'bg-amber-50 group-hover:bg-amber-100' : 'bg-gray-50 group-hover:bg-gray-100']" :style="{ left: colLeft.end + 'px' }">
-                    <div class="text-xs">{{ formatDate(itemEndDate(child)) }}</div>
-                    <div v-if="child.task_type === 'task'" class="text-[10px] text-sky-900 leading-snug">{{ formatDate(child.actual_end_date) }}</div>
+                    <template v-if="isEditMode && child.task_type === 'task'">
+                      <input type="date" v-model="child.end_date" class="border border-gray-300 rounded px-1 py-0.5 text-xs w-full" />
+                    </template>
+                    <template v-else>
+                      <div class="text-xs">{{ formatDate(itemEndDate(child)) }}</div>
+                      <div v-if="child.task_type === 'task'" class="text-[10px] text-sky-900 leading-snug">{{ formatDate(child.actual_end_date) }}</div>
+                    </template>
                   </td>
                   <td v-if="show('hours')" :class="['sticky z-10 border-r border-b border-gray-500 px-3 py-2 text-xs text-right overflow-hidden', isActiveToday(child) ? 'bg-amber-50 group-hover:bg-amber-100' : 'bg-gray-50 group-hover:bg-gray-100']" :style="{ left: colLeft.hours + 'px' }">
-                    {{ formatHours(itemHours(child)) }}
+                    <input v-if="isEditMode && child.task_type === 'task'" type="number" step="0.5" min="0"
+                      :value="child.estimated_hours ?? ''"
+                      @change="child.estimated_hours = ($event.target as HTMLInputElement).value ? parseFloat(($event.target as HTMLInputElement).value) : null"
+                      class="border border-gray-300 rounded px-1 py-0.5 text-xs w-full text-right" />
+                    <span v-else>{{ formatHours(itemHours(child)) }}</span>
                   </td>
                   <td v-if="show('op')" :class="['sticky z-10 border-r border-b border-gray-500 px-2 py-2 whitespace-nowrap overflow-hidden', isActiveToday(child) ? 'bg-amber-50 group-hover:bg-amber-100' : 'bg-gray-50 group-hover:bg-gray-100']" :style="{ left: colLeft.op + 'px' }">
-                    <button v-if="isAdmin"
-                      class="rounded hover:bg-green-100 hover:text-green-600 transition-colors w-5 h-5 inline-flex items-center justify-center text-sky-900"
-                      title="子タスクを追加" @click="openBulkDialog(child.id, child.title)">
-                      <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
-                        <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd"/>
-                      </svg>
-                    </button>
-                    <router-link :to="`/projects/${projectId}/tasks/${child.id}`"
-                      class="rounded hover:bg-blue-100 hover:text-blue-500 transition-colors w-5 h-5 inline-flex items-center justify-center text-sky-900 ml-1"
-                      title="編集">
-                      <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
-                        <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/>
-                      </svg>
-                    </router-link>
-                    <button class="rounded hover:bg-red-100 hover:text-red-500 transition-colors w-5 h-5 inline-flex items-center justify-center text-sky-900 ml-1"
-                      title="削除" @click="deleteTargetId = child.id; showDeleteDialog = true">
-                      <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
-                        <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zm0 2h2l.5 1H8.5L9 4zM6 6h8v10H6V6zm2 2a1 1 0 00-1 1v4a1 1 0 102 0V9a1 1 0 00-1-1zm4 0a1 1 0 00-1 1v4a1 1 0 102 0V9a1 1 0 00-1-1z" clip-rule="evenodd"/>
-                      </svg>
-                    </button>
-                    <router-link v-if="child.task_kind === 'レビュー依頼'"
-                      :to="`/projects/${projectId}/tasks/${child.id}/reviews`"
-                      class="rounded hover:bg-yellow-100 hover:text-yellow-600 transition-colors w-5 h-5 inline-flex items-center justify-center text-sky-900 ml-1"
-                      title="レビュー">
-                      <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
-                        <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/><path fill-rule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm9.707 5.707a1 1 0 00-1.414-1.414L9 12.586l-1.293-1.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
-                      </svg>
-                    </router-link>
+                    <template v-if="isEditMode">
+                      <button :disabled="!canMoveUp(child.id)" class="w-5 h-5 rounded hover:bg-gray-100 disabled:opacity-30 text-sky-900 inline-flex items-center justify-center text-xs" @click="moveSibling(child.id, 'up')">↑</button>
+                      <button :disabled="!canMoveDown(child.id)" class="w-5 h-5 rounded hover:bg-gray-100 disabled:opacity-30 text-sky-900 inline-flex items-center justify-center text-xs ml-1" @click="moveSibling(child.id, 'down')">↓</button>
+                    </template>
+                    <template v-else>
+                      <button v-if="isAdmin"
+                        class="rounded hover:bg-green-100 hover:text-green-600 transition-colors w-5 h-5 inline-flex items-center justify-center text-sky-900"
+                        title="子タスクを追加" @click="openBulkDialog(child.id, child.title)">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
+                          <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd"/>
+                        </svg>
+                      </button>
+                      <router-link :to="`/projects/${projectId}/tasks/${child.id}`"
+                        class="rounded hover:bg-blue-100 hover:text-blue-500 transition-colors w-5 h-5 inline-flex items-center justify-center text-sky-900 ml-1"
+                        title="編集">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
+                          <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/>
+                        </svg>
+                      </router-link>
+                      <button class="rounded hover:bg-red-100 hover:text-red-500 transition-colors w-5 h-5 inline-flex items-center justify-center text-sky-900 ml-1"
+                        title="削除" @click="deleteTargetId = child.id; showDeleteDialog = true">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
+                          <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zm0 2h2l.5 1H8.5L9 4zM6 6h8v10H6V6zm2 2a1 1 0 00-1 1v4a1 1 0 102 0V9a1 1 0 00-1-1zm4 0a1 1 0 00-1 1v4a1 1 0 102 0V9a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                        </svg>
+                      </button>
+                      <router-link v-if="child.task_kind === 'レビュー依頼'"
+                        :to="`/projects/${projectId}/tasks/${child.id}/reviews`"
+                        class="rounded hover:bg-yellow-100 hover:text-yellow-600 transition-colors w-5 h-5 inline-flex items-center justify-center text-sky-900 ml-1"
+                        title="レビュー">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
+                          <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/><path fill-rule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm9.707 5.707a1 1 0 00-1.414-1.414L9 12.586l-1.293-1.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                        </svg>
+                      </router-link>
+                    </template>
                   </td>
                   <!-- ガントセル（子・列ごと・上半分=予定 / 下半分=実績） -->
                   <td v-for="(col, ci) in ganttCols" :key="col.key"
@@ -898,48 +1194,86 @@ onMounted(() => {
                       </div>
                     </td>
                     <td v-if="show('status')" :class="['sticky z-10 border-r border-b border-gray-500 px-2 py-2 overflow-hidden', isActiveToday(grand) ? 'bg-amber-50 group-hover:bg-amber-100' : 'bg-blue-50 group-hover:bg-blue-100']" :style="{ left: colLeft.status + 'px' }">
-                      <select v-model="grand.status" :class="statusClass(grand.status)"
-                        class="border rounded-full px-2 py-0.5 text-xs cursor-pointer w-full">
+                      <select v-if="!isEditMode" :value="grand.status" :class="statusClass(grand.status)"
+                        class="border rounded-full px-2 py-0.5 text-xs cursor-pointer w-full"
+                        @change="handleStatusChange(grand, ($event.target as HTMLSelectElement).value as TaskStatus)">
                         <option v-for="s in statusOptions" :key="s" :value="s" class="bg-white text-sky-900">{{ s }}</option>
                       </select>
+                      <span v-else :class="statusClass(grand.status)" class="px-2 py-0.5 rounded-full text-xs block text-center">{{ grand.status }}</span>
                     </td>
-                    <td v-if="show('assignee')" :class="['sticky z-10 border-r border-b border-gray-500 px-3 py-2 text-xs truncate overflow-hidden', isActiveToday(grand) ? 'bg-amber-50 group-hover:bg-amber-100' : memberCellBgClasses(grand) || 'bg-blue-50 group-hover:bg-blue-100']" :style="{ left: colLeft.assignee + 'px' }">
-                      {{ grand.assignees.map(a => a.name).join(', ') || '—' }}
+                    <td v-if="show('assignee')" :class="['sticky border-r border-b border-gray-500 px-3 py-2 text-xs', isEditMode ? 'z-[60] overflow-visible' : 'z-10 overflow-hidden', isActiveToday(grand) ? 'bg-amber-50 group-hover:bg-amber-100' : memberCellBgClasses(grand) || 'bg-blue-50 group-hover:bg-blue-100']" :style="{ left: colLeft.assignee + 'px' }">
+                      <div v-if="isEditMode" class="relative">
+                        <button class="text-xs truncate text-left w-full text-sky-900 hover:underline"
+                          @click="assigneePopoverId = assigneePopoverId === grand.id ? null : grand.id">
+                          {{ draftAssigneeNames(grand) }}
+                        </button>
+                        <div v-if="assigneePopoverId === grand.id"
+                          class="absolute left-0 top-full mt-1 bg-white border border-gray-300 rounded shadow-lg z-[200] py-1 min-w-[140px]">
+                          <label v-for="m in members" :key="m.user_id"
+                            class="flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-gray-50 cursor-pointer">
+                            <input type="checkbox"
+                              :checked="grand.assignees.some(a => a.id === m.user_id)"
+                              @change="toggleDraftAssignee(grand, m.user_id)" />
+                            {{ m.user_name }}
+                          </label>
+                        </div>
+                      </div>
+                      <div v-else class="truncate">{{ grand.assignees.map(a => a.name).join(', ') || '—' }}</div>
                     </td>
                     <td v-if="show('start')" :class="['sticky z-10 border-r border-b border-gray-500 px-2 py-1 overflow-hidden', isActiveToday(grand) ? 'bg-amber-50 group-hover:bg-amber-100' : 'bg-blue-50 group-hover:bg-blue-100']" :style="{ left: colLeft.start + 'px' }">
-                      <div class="text-xs">{{ formatDate(grand.start_date) }}</div>
-                      <div class="text-[10px] text-sky-900 leading-snug">{{ formatDate(grand.actual_start_date) }}</div>
+                      <template v-if="isEditMode">
+                        <input type="date" v-model="grand.start_date" class="border border-gray-300 rounded px-1 py-0.5 text-xs w-full" />
+                      </template>
+                      <template v-else>
+                        <div class="text-xs">{{ formatDate(grand.start_date) }}</div>
+                        <div class="text-[10px] text-sky-900 leading-snug">{{ formatDate(grand.actual_start_date) }}</div>
+                      </template>
                     </td>
                     <td v-if="show('end')" :class="['sticky z-10 border-r border-b border-gray-500 px-2 py-1 overflow-hidden', isActiveToday(grand) ? 'bg-amber-50 group-hover:bg-amber-100' : 'bg-blue-50 group-hover:bg-blue-100']" :style="{ left: colLeft.end + 'px' }">
-                      <div class="text-xs">{{ formatDate(grand.end_date) }}</div>
-                      <div class="text-[10px] text-sky-900 leading-snug">{{ formatDate(grand.actual_end_date) }}</div>
+                      <template v-if="isEditMode">
+                        <input type="date" v-model="grand.end_date" class="border border-gray-300 rounded px-1 py-0.5 text-xs w-full" />
+                      </template>
+                      <template v-else>
+                        <div class="text-xs">{{ formatDate(grand.end_date) }}</div>
+                        <div class="text-[10px] text-sky-900 leading-snug">{{ formatDate(grand.actual_end_date) }}</div>
+                      </template>
                     </td>
                     <td v-if="show('hours')" :class="['sticky z-10 border-r border-b border-gray-500 px-3 py-2 text-xs text-right overflow-hidden', isActiveToday(grand) ? 'bg-amber-50 group-hover:bg-amber-100' : 'bg-blue-50 group-hover:bg-blue-100']" :style="{ left: colLeft.hours + 'px' }">
-                      {{ formatHours(grand.estimated_hours) }}
+                      <input v-if="isEditMode" type="number" step="0.5" min="0"
+                        :value="grand.estimated_hours ?? ''"
+                        @change="grand.estimated_hours = ($event.target as HTMLInputElement).value ? parseFloat(($event.target as HTMLInputElement).value) : null"
+                        class="border border-gray-300 rounded px-1 py-0.5 text-xs w-full text-right" />
+                      <span v-else>{{ formatHours(grand.estimated_hours) }}</span>
                     </td>
                     <td v-if="show('op')" :class="['sticky z-10 border-r border-b border-gray-500 px-2 py-2 whitespace-nowrap overflow-hidden', isActiveToday(grand) ? 'bg-amber-50 group-hover:bg-amber-100' : 'bg-blue-50 group-hover:bg-blue-100']" :style="{ left: colLeft.op + 'px' }">
-                      <span class="w-5 h-5 inline-flex flex-shrink-0"></span>
-                      <router-link :to="`/projects/${projectId}/tasks/${grand.id}`"
-                        class="rounded hover:bg-blue-100 hover:text-blue-500 transition-colors w-5 h-5 inline-flex items-center justify-center text-sky-900 ml-1"
-                        title="編集">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
-                          <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/>
-                        </svg>
-                      </router-link>
-                      <button class="rounded hover:bg-red-100 hover:text-red-500 transition-colors w-5 h-5 inline-flex items-center justify-center text-sky-900 ml-1"
-                        title="削除" @click="deleteTargetId = grand.id; showDeleteDialog = true">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
-                          <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zm0 2h2l.5 1H8.5L9 4zM6 6h8v10H6V6zm2 2a1 1 0 00-1 1v4a1 1 0 102 0V9a1 1 0 00-1-1zm4 0a1 1 0 00-1 1v4a1 1 0 102 0V9a1 1 0 00-1-1z" clip-rule="evenodd"/>
-                        </svg>
-                      </button>
-                      <router-link v-if="grand.task_kind === 'レビュー依頼'"
-                        :to="`/projects/${projectId}/tasks/${grand.id}/reviews`"
-                        class="rounded hover:bg-yellow-100 hover:text-yellow-600 transition-colors w-5 h-5 inline-flex items-center justify-center text-sky-900 ml-1"
-                        title="レビュー">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
-                          <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/><path fill-rule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm9.707 5.707a1 1 0 00-1.414-1.414L9 12.586l-1.293-1.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
-                        </svg>
-                      </router-link>
+                      <template v-if="isEditMode">
+                        <button :disabled="!canMoveUp(grand.id)" class="w-5 h-5 rounded hover:bg-gray-100 disabled:opacity-30 text-sky-900 inline-flex items-center justify-center text-xs" @click="moveSibling(grand.id, 'up')">↑</button>
+                        <button :disabled="!canMoveDown(grand.id)" class="w-5 h-5 rounded hover:bg-gray-100 disabled:opacity-30 text-sky-900 inline-flex items-center justify-center text-xs ml-1" @click="moveSibling(grand.id, 'down')">↓</button>
+                      </template>
+                      <template v-else>
+                        <span class="w-5 h-5 inline-flex flex-shrink-0"></span>
+                        <router-link :to="`/projects/${projectId}/tasks/${grand.id}`"
+                          class="rounded hover:bg-blue-100 hover:text-blue-500 transition-colors w-5 h-5 inline-flex items-center justify-center text-sky-900 ml-1"
+                          title="編集">
+                          <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
+                            <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/>
+                          </svg>
+                        </router-link>
+                        <button class="rounded hover:bg-red-100 hover:text-red-500 transition-colors w-5 h-5 inline-flex items-center justify-center text-sky-900 ml-1"
+                          title="削除" @click="deleteTargetId = grand.id; showDeleteDialog = true">
+                          <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zm0 2h2l.5 1H8.5L9 4zM6 6h8v10H6V6zm2 2a1 1 0 00-1 1v4a1 1 0 102 0V9a1 1 0 00-1-1zm4 0a1 1 0 00-1 1v4a1 1 0 102 0V9a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                          </svg>
+                        </button>
+                        <router-link v-if="grand.task_kind === 'レビュー依頼'"
+                          :to="`/projects/${projectId}/tasks/${grand.id}/reviews`"
+                          class="rounded hover:bg-yellow-100 hover:text-yellow-600 transition-colors w-5 h-5 inline-flex items-center justify-center text-sky-900 ml-1"
+                          title="レビュー">
+                          <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
+                            <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/><path fill-rule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm9.707 5.707a1 1 0 00-1.414-1.414L9 12.586l-1.293-1.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                          </svg>
+                        </router-link>
+                      </template>
                     </td>
                     <!-- ガントセル（孫・列ごと） -->
                     <td v-for="(col, ci) in ganttCols" :key="col.key"
@@ -1000,6 +1334,39 @@ onMounted(() => {
             class="px-4 py-2 text-sm text-white bg-blue-600 rounded transition-colors hover:bg-blue-700 disabled:opacity-50"
             @click="handleBulkAdd">{{ bulkPreview.length }} 件追加</button>
         </div>
+      </div>
+    </div>
+
+    <!-- タスク取得中オーバーレイ（フィルター変更時・最低0.5秒表示・全操作無効化） -->
+    <div v-if="isLoadingTasks" class="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-[150] cursor-not-allowed">
+      <div class="bg-white rounded-lg shadow-lg px-6 py-4 flex items-center gap-3">
+        <svg class="animate-spin w-5 h-5 text-blue-600 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 22 6.477 22 12h-4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
+        </svg>
+        <span class="text-sm text-sky-900">読み込み中...</span>
+      </div>
+    </div>
+
+    <!-- 保存中オーバーレイ -->
+    <div v-if="isSaving" class="fixed inset-0 bg-black bg-opacity-20 flex items-center justify-center z-[200]">
+      <div class="bg-white rounded-lg shadow-lg px-6 py-4 flex items-center gap-3">
+        <svg class="animate-spin w-5 h-5 text-blue-600 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 22 6.477 22 12h-4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
+        </svg>
+        <span class="text-sm text-sky-900">保存中...</span>
+      </div>
+    </div>
+
+    <!-- ステータス更新中オーバーレイ -->
+    <div v-if="isUpdating" class="fixed inset-0 bg-black bg-opacity-20 flex items-center justify-center z-[100] pointer-events-auto">
+      <div class="bg-white rounded-lg shadow-lg px-6 py-4 flex items-center gap-3">
+        <svg class="animate-spin w-5 h-5 text-blue-600 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 22 6.477 22 12h-4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
+        </svg>
+        <span class="text-sm text-sky-900">更新中...</span>
       </div>
     </div>
 

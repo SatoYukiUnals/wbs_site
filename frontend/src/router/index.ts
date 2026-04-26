@@ -1,6 +1,7 @@
 // ルート定義（認証ガード付き）
 import { createRouter, createWebHistory } from 'vue-router'
 import { getToken } from '@/api'
+import { isPageLoading } from '@/composables/usePageLoading'
 
 const PUBLIC_ROUTES = ['/login', '/register']
 
@@ -64,9 +65,14 @@ const router = createRouter({
 
 // 未認証ユーザーをログイン画面へリダイレクトするナビゲーションガード
 router.beforeEach((to) => {
+  isPageLoading.value = true
   if (!PUBLIC_ROUTES.includes(to.path) && !getToken()) {
     return { path: '/login' }
   }
+})
+
+router.afterEach(() => {
+  isPageLoading.value = false
 })
 
 export default router

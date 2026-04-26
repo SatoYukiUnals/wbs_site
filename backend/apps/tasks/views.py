@@ -45,14 +45,25 @@ class TaskListCreateView(generics.ListCreateAPIView):
         """
         ルートタスク（parent_task=None）のみ返す。
         TaskSerializer で children を再帰的にシリアライズする。
+        クエリパラメータ: status / assignee（user_id）/ quarter（quarter_id）
         """
         project_id = self.kwargs['project_id']
-        return Task.objects.filter(
+        qs = Task.objects.filter(
             project__id=project_id,
             project__tenant=self.request.user.tenant,
             parent_task__isnull=True,
             deleted_at__isnull=True,
-        ).order_by('order', 'created_at')
+        )
+        status_param = self.request.query_params.get('status')
+        if status_param:
+            qs = qs.filter(status=status_param)
+        assignee_param = self.request.query_params.get('assignee')
+        if assignee_param:
+            qs = qs.filter(assignees__user__id=assignee_param)
+        quarter_param = self.request.query_params.get('quarter')
+        if quarter_param:
+            qs = qs.filter(quarter__id=quarter_param)
+        return qs.order_by('order', 'created_at')
 
     def create(self, request, *args, **kwargs):
         """タスクを作成して depth・wbs_no を自動設定する"""

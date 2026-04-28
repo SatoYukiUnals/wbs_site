@@ -700,17 +700,72 @@ const handleDelete = async () => {
 }
 
 // =====================================================================
-// タスク追加ダイアログ（一括追加）
+// タスク追加ダイアログ（一括追加・階層対応）
 // =====================================================================
 const showBulkDialog = ref(false)
 const bulkText = ref('')
 const bulkParentId = ref<string | null>(null)
 const bulkParentTitle = ref<string | null>(null)
-const bulkTaskType = ref<'task' | 'item'>('task')
 
-const bulkPreview = computed(() =>
-  bulkText.value.split('\n').map(l => l.trim()).filter(l => l.length > 0)
-)
+// 階層付き入力の最大段数（バックエンドの depth 上限と揃える）
+const BULK_MAX_DEPTH = 3  // 0,1,2,3 の4階層
+
+/** 解析後の1行を表す型 */
+type ParsedBulkLine = {
+  title: string
+  /** インデントによる階層（0=ルート、最大 BULK_MAX_DEPTH） */
+  depth: number
+  /** 親となる行の parsedLines 配列内インデックス。ルートなら null */
+  parentIdx: number | null
+  /** 子を持つかどうか（true ならタスク種別は 'item' 強制） */
+  hasChild: boolean
+}
+
+/**
+ * テキストエリアの内容を階層付きの行リストに変換する。
+ * - 空行は無視
+ * - 行頭のタブは半角スペース2個に変換
+ * - 半角スペース2個ごとに1段階のインデント
+ * - 最大 BULK_MAX_DEPTH を超えたインデントはクランプ
+ * - 直前の行から2段階以上深くなる飛び級も「+1段階」にクランプ
+ */
+const parseBulkText = (text: string): ParsedBulkLine[] => {
+  const result: ParsedBulkLine[] = []
+  let prevDepth = -1
+  for (const raw of text.split('\n')) {
+    if (raw.trim().length === 0) continue
+    const expanded = raw.replace(/\t/g, '  ')
+    const leading = expanded.length - expanded.trimStart().length
+    let depth = Math.min(Math.floor(leading / 2), BULK_MAX_DEPTH)
+    // 飛び級は許可しない（depth は前行 + 1 以下にクランプ）
+    if (depth > prevDepth + 1) depth = prevDepth + 1
+    result.push({
+      title: expanded.trim(),
+      depth,
+      parentIdx: null,
+      hasChild: false,
+    })
+    prevDepth = depth
+  }
+  // 親インデックスと hasChild を解決する
+  const stack: number[] = []  // stack[d] = depth d の最後に出現した行のインデックス
+  for (let i = 0; i < result.length; i++) {
+    const line = result[i]
+    // depth より深いスタックエントリは破棄
+    stack.length = line.depth
+    if (line.depth > 0) {
+      const pIdx = stack[line.depth - 1]
+      if (pIdx !== undefined) {
+        line.parentIdx = pIdx
+        result[pIdx].hasChild = true
+      }
+    }
+    stack[line.depth] = i
+  }
+  return result
+}
+
+const parsedBulkLines = computed(() => parseBulkText(bulkText.value))
 
 const openBulkDialog = (parentId?: string, parentTitle?: string) => {
   bulkParentId.value = parentId ?? null
@@ -724,18 +779,57 @@ const closeBulkDialog = () => {
   bulkText.value = ''
   bulkParentId.value = null
   bulkParentTitle.value = null
-  bulkTaskType.value = 'task'
 }
 
 const handleBulkAdd = async () => {
-  if (bulkPreview.value.length === 0) return
-  await api.tasks.bulkCreate(
-    projectId,
-    bulkPreview.value,
-    filterQuarter.value || undefined,
-    bulkParentId.value ?? undefined,
-    bulkTaskType.value,
-  )
+  const lines = parsedBulkLines.value
+  if (lines.length === 0) return
+
+  // 行インデックス → 作成済みタスクID のマップ
+  const createdIdByLineIdx = new Map<number, string>()
+
+  // depth が浅い順に、各階層をひとつのリクエストで送信する
+  for (let d = 0; d <= BULK_MAX_DEPTH; d++) {
+    const layer = lines
+      .map((l, idx) => ({ ...l, idx }))
+      .filter(l => l.depth === d)
+    if (layer.length === 0) continue
+
+    // 子を持つ行は自動で 'item'、それ以外は既定で 'task'
+    const items = layer.map(l => ({
+      title: l.title,
+      task_type: l.hasChild ? 'item' : 'task',
+      parent_task: l.parentIdx === null
+        ? (bulkParentId.value ?? null)
+        : createdIdByLineIdx.get(l.parentIdx) ?? null,
+      quarter: filterQuarter.value || null,
+    }))
+
+    const created = await api.tasks.bulkCreate(projectId, items)
+
+    // レスポンスは wbs_no で全体ソートされて返るため、parent ごとに sort_order 昇順で整列して
+    // 入力順（同一親の中での出現順）と突合する
+    const groupedByParent = new Map<string | null, Task[]>()
+    for (const t of created) {
+      const key = t.parent_task_id ?? null
+      if (!groupedByParent.has(key)) groupedByParent.set(key, [])
+      groupedByParent.get(key)!.push(t)
+    }
+    for (const arr of groupedByParent.values()) {
+      arr.sort((a, b) => a.sort_order - b.sort_order)
+    }
+    const cursorByParent = new Map<string | null, number>()
+    for (const l of layer) {
+      const parentKey = l.parentIdx === null
+        ? (bulkParentId.value ?? null)
+        : createdIdByLineIdx.get(l.parentIdx) ?? null
+      const cursor = cursorByParent.get(parentKey) ?? 0
+      const t = groupedByParent.get(parentKey)?.[cursor]
+      if (t) createdIdByLineIdx.set(l.idx, t.id)
+      cursorByParent.set(parentKey, cursor + 1)
+    }
+  }
+
   closeBulkDialog()
   await fetchTasks()
 }
@@ -1306,33 +1400,40 @@ onMounted(() => {
       </table>
     </div>
 
-    <!-- ========== タスク追加ダイアログ（一括追加） ========== -->
+    <!-- ========== タスク追加ダイアログ（一括追加・階層対応） ========== -->
     <div v-if="showBulkDialog" id="wbs_list__bulk_dialog" class="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-      <div class="bg-white rounded-lg shadow-lg p-6 w-[480px]">
+      <div class="bg-white rounded-lg shadow-lg p-6 w-[520px]">
         <h2 class="text-base font-semibold mb-1">タスクを一括追加</h2>
         <p v-if="bulkParentTitle" class="text-xs text-blue-600 mb-2">親：{{ bulkParentTitle }}</p>
-        <div class="flex gap-4 mb-3">
-          <label class="flex items-center gap-1.5 text-sm text-sky-900 cursor-pointer">
-            <input type="radio" v-model="bulkTaskType" value="task" />
-            タスク
-          </label>
-          <label class="flex items-center gap-1.5 text-sm text-sky-900 cursor-pointer">
-            <input type="radio" v-model="bulkTaskType" value="item" />
-            親項目
-          </label>
-        </div>
-        <p class="text-xs text-sky-900 mb-3">1行に1つのタスク名を入力してください。空行は無視されます。</p>
-        <textarea id="wbs_list__bulk_textarea" v-model="bulkText" rows="8"
-          placeholder="例）&#10;要件定義&#10;基本設計&#10;詳細設計"
+        <p class="text-xs text-sky-900 mb-1">
+          1行に1タスク。<strong>半角スペース2個 / Tab</strong> でインデントすると下の階層になります（最大4階層）。子を持つ行は自動で「親項目」、それ以外は「タスク」として作成されます。
+        </p>
+        <textarea id="wbs_list__bulk_textarea" v-model="bulkText" rows="10"
+          placeholder="例）&#10;要件定義&#10;  ヒアリング&#10;  要件まとめ&#10;基本設計&#10;  画面設計&#10;    画面一覧作成&#10;    画面遷移図作成"
           data-testid="bulk-add-textarea"
-          class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono" />
-        <div class="mt-2 text-xs text-sky-900">{{ bulkPreview.length }} 件追加されます</div>
+          class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono whitespace-pre" />
+        <!-- プレビュー（ツリー表示） -->
+        <div v-if="parsedBulkLines.length > 0" class="mt-2 max-h-40 overflow-y-auto border border-gray-200 rounded px-3 py-2 bg-gray-50">
+          <div
+            v-for="(l, i) in parsedBulkLines"
+            :key="i"
+            :style="{ paddingLeft: `${l.depth * 16}px` }"
+            class="text-xs text-sky-900 leading-5 truncate"
+          >
+            <span class="text-gray-400">{{ l.hasChild ? '▾' : '・' }}</span>
+            <span class="ml-1">{{ l.title }}</span>
+            <span class="ml-2 text-[10px] text-gray-500">
+              [{{ l.hasChild ? '親項目' : 'タスク' }}]
+            </span>
+          </div>
+        </div>
+        <div class="mt-2 text-xs text-sky-900">{{ parsedBulkLines.length }} 件追加されます</div>
         <div class="flex justify-end gap-2 mt-4">
           <button id="wbs_list__bulk_cancel_btn" class="px-4 py-2 text-sm text-gray-600 border rounded transition-colors hover:bg-gray-100"
             @click="closeBulkDialog">キャンセル</button>
-          <button id="wbs_list__bulk_submit_btn" :disabled="bulkPreview.length === 0"
+          <button id="wbs_list__bulk_submit_btn" :disabled="parsedBulkLines.length === 0"
             class="px-4 py-2 text-sm text-white bg-blue-600 rounded transition-colors hover:bg-blue-700 disabled:opacity-50"
-            @click="handleBulkAdd">{{ bulkPreview.length }} 件追加</button>
+            @click="handleBulkAdd">{{ parsedBulkLines.length }} 件追加</button>
         </div>
       </div>
     </div>

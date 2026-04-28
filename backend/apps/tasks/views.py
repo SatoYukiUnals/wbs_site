@@ -78,10 +78,10 @@ class TaskListCreateView(generics.ListCreateAPIView):
         # depth を親タスクから計算する
         parent_task = data.get('parent_task')
         if parent_task is not None:
-            # 深さ制限: 最大2階層（0/1/2）
-            if parent_task.depth >= 2:
+            # 深さ制限: 最大4階層（depth 0/1/2/3）
+            if parent_task.depth >= 3:
                 return Response(
-                    {'detail': 'タスクの深さは最大3階層（depth 0/1/2）までです。'},
+                    {'detail': 'タスクの深さは最大4階層（depth 0/1/2/3）までです。'},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
             depth = parent_task.depth + 1
@@ -126,7 +126,7 @@ class TaskBulkCreateView(APIView):
             parent_task = data.get('parent_task')
             depth = (parent_task.depth + 1) if parent_task else 0
 
-            if parent_task and parent_task.depth >= 2:
+            if parent_task and parent_task.depth >= 3:
                 continue  # 深さ超過は無視する
 
             # 親ごとに既存最大 order+1 をベースに order を割り当てる
@@ -249,9 +249,9 @@ class TaskOrderView(APIView):
             if new_parent_id:
                 try:
                     new_parent = Task.objects.get(id=new_parent_id, project=task.project)
-                    if new_parent.depth >= 2:
+                    if new_parent.depth >= 3:
                         return Response(
-                            {'detail': 'タスクの深さは最大3階層（depth 0/1/2）までです。'},
+                            {'detail': 'タスクの深さは最大4階層（depth 0/1/2/3）までです。'},
                             status=status.HTTP_400_BAD_REQUEST,
                         )
                     task.parent_task = new_parent

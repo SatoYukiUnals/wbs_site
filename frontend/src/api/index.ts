@@ -285,14 +285,26 @@ export const api = {
       return adaptTask(data)
     },
 
-    /** タスクを一括作成する（タイトルの配列を渡す。quarterId・parentTaskId・taskType を指定すると各フィールドも送信する） */
-    bulkCreate: async (projectId: string, titles: string[], quarterId?: string, parentTaskId?: string, taskType?: string): Promise<Task[]> => {
-      const payload = titles.map(title => ({
-        title,
-        ...(quarterId ? { quarter: quarterId } : {}),
-        ...(parentTaskId ? { parent_task: parentTaskId } : {}),
-        ...(taskType ? { task_type: taskType } : {}),
-      }))
+    /**
+     * タスクを一括作成する。
+     * 1件ごとに parent_task / task_type / quarter を個別指定できるリッチペイロードを受け取る。
+     */
+    bulkCreate: async (
+      projectId: string,
+      items: Array<{
+        title: string
+        parent_task?: string | null
+        quarter?: string | null
+        task_type?: string
+      }>,
+    ): Promise<Task[]> => {
+      const payload = items.map(it => {
+        const o: Record<string, unknown> = { title: it.title }
+        if (it.quarter) o.quarter = it.quarter
+        if (it.parent_task) o.parent_task = it.parent_task
+        if (it.task_type) o.task_type = it.task_type
+        return o
+      })
       const { data } = await http.post(`/projects/${projectId}/tasks/bulk/`, payload)
       return (data as ApiTask[]).map(adaptTask)
     },

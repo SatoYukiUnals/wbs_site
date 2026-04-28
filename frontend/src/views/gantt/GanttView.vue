@@ -37,9 +37,8 @@ const getBarStyle = (task: Task) => {
   return { left: `${Math.min(left, 95)}%`, width: `${Math.min(width, 100 - left)}%` }
 }
 
-/** メンバーカラーパレット（予定:700・実績:900） */
+/** メンバーカラーパレット（予定バー用） */
 const BAR_COLORS_500 = ['bg-blue-500', 'bg-emerald-500', 'bg-violet-500', 'bg-amber-500', 'bg-rose-500', 'bg-cyan-500', 'bg-indigo-500', 'bg-teal-500']
-const BAR_COLORS_900 = ['bg-blue-900', 'bg-emerald-900', 'bg-violet-900', 'bg-amber-900', 'bg-rose-900', 'bg-cyan-900', 'bg-indigo-900', 'bg-teal-900']
 
 import type { ProjectMember } from '@/types'
 const members = ref<ProjectMember[]>([])
@@ -55,11 +54,6 @@ const memberColorIdx = (userId: string): number => {
 const barColor = (task: Task): string => {
   const uid = task.assignees[0]?.id
   return uid ? BAR_COLORS_500[memberColorIdx(uid)] : 'bg-gray-500'
-}
-
-const actualBarColor = (task: Task): string => {
-  const uid = task.assignees[0]?.id
-  return uid ? BAR_COLORS_900[memberColorIdx(uid)] : 'bg-gray-700'
 }
 
 /** 実績バーのスタイル（actual_start_date が設定されている場合） */

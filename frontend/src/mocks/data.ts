@@ -891,7 +891,7 @@ export const mockReviewHistory: ReviewHistory[] = [
 
 /** MOCKロードマップアイテム */
 export const mockRoadmapItems: RoadmapItem[] = [
-  { id: 'ri1', title: '解約後アンケート リリース', description: '解約後アンケート機能の本番リリース', quarter_id: 'q1', quarter_title: '2026年4月〜6月', status: 'InProgress', project_id: 'p1' },
+  { id: 'ri1', title: '解約後アンケート リリース', description: '解約後アンケート機能の本番リリース', quarter_id: 'q1', quarter_title: '2026年4月〜6月', status: '進行中', project_id: 'p1' },
   { id: 'ri2', title: '契約計算式修正 リリース', description: '端数処理バグ修正の本番リリース', quarter_id: 'q1', quarter_title: '2026年4月〜6月', status: '計画中', project_id: 'p1' },
   { id: 'ri3', title: '文字サイズ自動調整 リリース', description: 'PDF出力文字サイズ自動調整機能のリリース', quarter_id: 'q1', quarter_title: '2026年4月〜6月', status: '計画中', project_id: 'p1' },
 ]

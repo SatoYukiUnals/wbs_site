@@ -141,8 +141,9 @@ echo "── [4/6] Docker イメージをビルドして起動"
 docker compose -f "$COMPOSE_FILE" up -d --build
 
 echo ""
-echo "── [5/6] マイグレーション + 静的ファイル収集"
-docker compose -f "$COMPOSE_FILE" exec -T "$WEB_SERVICE" python manage.py migrate --noinput
+echo "── [5/6] 静的ファイル収集（migrate は entrypoint.sh が実行）"
+# migrate は entrypoint.sh がコンテナ起動時に流すため、ここでは実行しない
+# （二重実行で UniqueViolation のレースが発生するため）
 docker compose -f "$COMPOSE_FILE" exec -T "$WEB_SERVICE" python manage.py collectstatic --noinput
 
 if [ -n "$SEED_FILE" ]; then

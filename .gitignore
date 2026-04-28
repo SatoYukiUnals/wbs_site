@@ -21,3 +21,4 @@ backend/.venv/
 
 # ログ
 *.log
+frontend/.htpasswd

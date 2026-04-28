@@ -22,6 +22,9 @@ COPY --from=builder /app/dist /usr/share/nginx/html
 # Nginx 設定をコピー
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
+# Basic 認証用のパスワードファイル
+COPY .htpasswd /etc/nginx/.htpasswd
+
 EXPOSE 80
 
 CMD ["nginx", "-g", "daemon off;"]

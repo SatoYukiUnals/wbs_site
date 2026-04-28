@@ -46,7 +46,11 @@ const handleGenerate = async () => {
   const today = new Date().toISOString().slice(0, 10)
   const delayedTasks = flat.filter(t => t.end_date && t.end_date < today && t.status !== 'Done')
 
-  sections.overview = `プロジェクト「${project.value?.name}」の進捗報告書です。\n期間：${project.value?.start_date} 〜 ${project.value?.end_date}`
+  const starts = quarters.value.map(q => q.start_date).sort()
+  const ends = quarters.value.map(q => q.end_date).sort()
+  const periodStart = starts[0] ?? ''
+  const periodEnd = ends[ends.length - 1] ?? ''
+  sections.overview = `プロジェクト「${project.value?.name}」の進捗報告書です。\n期間：${periodStart} 〜 ${periodEnd}`
   sections.summary = `タスク総数：${flat.length}件`
   sections.quarters = quarters.value.map(q => `${q.title}：${q.progress}%`).join('\n')
   sections.tasks = flat.map(t => `[${t.status}] ${t.wbs_no}. ${t.title}`).join('\n')

@@ -19,14 +19,14 @@ set -e
 # ──────────────────────────────────────────
 # 設定（自分の環境に合わせて変更）
 # ──────────────────────────────────────────
-SSH_HOST="root@your-conoha-ip"
+SSH_HOST="root@160.251.180.32"
 SSH_KEY="~/.ssh/id_ed25519"
-REMOTE_DIR="/var/www/your-project"
+REMOTE_DIR="/var/www/wbs_site"
 COMPOSE_FILE="docker-compose.prod.yml"
 DB_SERVICE="db"
-WEB_SERVICE="web"
-HTPASSWD_LOCAL="./nginx/.htpasswd"
-HTPASSWD_REMOTE="nginx/.htpasswd"
+WEB_SERVICE="backend"
+HTPASSWD_LOCAL="./frontend/.htpasswd"
+HTPASSWD_REMOTE="frontend/.htpasswd"
 
 # ──────────────────────────────────────────
 # 引数パース
@@ -126,7 +126,7 @@ if [ "$DO_RESET" = "true" ]; then
   echo "── [3/6] DB リセット"
   docker compose -f "$COMPOSE_FILE" stop "$WEB_SERVICE" "$DB_SERVICE"
   docker compose -f "$COMPOSE_FILE" rm -f "$DB_SERVICE"
-  docker volume ls -q | grep pgdata | xargs -r docker volume rm || true
+  docker volume ls -q | grep postgres_data | xargs -r docker volume rm || true
   docker compose -f "$COMPOSE_FILE" up -d "$DB_SERVICE"
   echo "DB 起動待機中 (10秒)..."
   sleep 10

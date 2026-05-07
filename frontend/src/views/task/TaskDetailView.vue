@@ -3,7 +3,9 @@
 import { reactive, ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '@/api'
-import type { Task, Quarter, TaskStatus, TaskKind, TaskType } from '@/types'
+import type {
+  Task, Quarter, TaskStatus, TaskKind, TaskType, ProjectMember,
+} from '@/types'
 
 const route = useRoute()
 const router = useRouter()
@@ -12,6 +14,7 @@ const projectId = route.params.projectId as string
 
 const task = ref<Task | null>(null)
 const quarters = ref<Quarter[]>([])
+const members = ref<ProjectMember[]>([])
 const isLoading = ref(true)
 
 const form = reactive({
@@ -25,15 +28,21 @@ const form = reactive({
   estimated_hours: '' as string | number,
   quarter_id: '',
   task_kind: null as TaskKind | null,
+  tm_reviewer_id: '' as string,
 })
 
+// 初期値を保持しておき、保存時に「日付が手動編集されたか」を判定する
+const initialDates = { start: '', end: '' }
+
 onMounted(async () => {
-  const [t, q] = await Promise.all([
+  const [t, q, m] = await Promise.all([
     api.tasks.get(projectId, taskId),
     api.quarters.list(projectId),
+    api.projects.listMembers(projectId),
   ])
   task.value = t
   quarters.value = q
+  members.value = m
   form.title = t.title
   form.task_type = t.task_type
   form.description = t.description
@@ -44,6 +53,9 @@ onMounted(async () => {
   form.estimated_hours = t.estimated_hours ?? ''
   form.quarter_id = t.quarter_id ?? ''
   form.task_kind = t.task_kind
+  form.tm_reviewer_id = t.tm_reviewer?.id ?? ''
+  initialDates.start = form.start_date
+  initialDates.end = form.end_date
   isLoading.value = false
 })
 
@@ -59,32 +71,45 @@ const handleSubmit = async () => {
   if (!validate()) return
   isLoading.value = true
   try {
-    // 親項目（item）の場合はタイトルと種別のみ送信し、その他のフィールドは
-    // 不要な値が残らないようサーバー側で null にクリアする
-    const payload: Record<string, unknown> = form.task_type === 'item'
-      ? {
-          title: form.title,
-          task_type: form.task_type,
-          description: form.description,
-          start_date: null,
-          end_date: null,
-          estimated_hours: null,
-          quarter: null,
-          task_kind: null,
-        }
-      : {
-          title: form.title,
-          task_type: form.task_type,
-          description: form.description,
-          status: form.status,
-          progress: form.progress,
-          start_date: form.start_date || null,
-          end_date: form.end_date || null,
-          estimated_hours: form.estimated_hours || null,
-          quarter: form.quarter_id || null,
-          task_kind: form.task_kind,
-        }
-    await api.tasks.update(projectId, taskId, payload)
+    // 親項目（item）の場合はタイトル・説明・種別・TMレビュー者のみ保存し
+    // その他のフィールドは null クリアする
+    if (form.task_type === 'item') {
+      const payload: Record<string, unknown> = {
+        title: form.title,
+        task_type: form.task_type,
+        description: form.description,
+        start_date: null,
+        end_date: null,
+        estimated_hours: null,
+        quarter: null,
+        task_kind: null,
+        tm_reviewer: form.tm_reviewer_id || null,
+        dates_manual: false,
+      }
+      await api.tasks.update(projectId, taskId, payload)
+    } else {
+      // タスクの場合: 日付が初期値から変わっていれば dates_manual=true
+      const datesChanged =
+        form.start_date !== initialDates.start ||
+        form.end_date !== initialDates.end
+      const payload: Record<string, unknown> = {
+        title: form.title,
+        task_type: form.task_type,
+        description: form.description,
+        status: form.status,
+        progress: form.progress,
+        start_date: form.start_date || null,
+        end_date: form.end_date || null,
+        estimated_hours: form.estimated_hours || null,
+        quarter: form.quarter_id || null,
+        task_kind: form.task_kind,
+      }
+      if (datesChanged) {
+        // 日付欄を完全にクリアした場合は手動フラグも解除
+        payload.dates_manual = !!(form.start_date || form.end_date)
+      }
+      await api.tasks.update(projectId, taskId, payload)
+    }
     router.push(`/projects/${projectId}/wbs`)
   } finally {
     isLoading.value = false
@@ -139,23 +164,6 @@ const statusColor = (status: string): string => {
           <p v-if="errors.title" class="text-red-500 text-xs mt-1">{{ errors.title }}</p>
         </div>
 
-        <!-- タスク種別（item=親項目 / task=タスク） -->
-        <div>
-          <label for="task_detail__task_type_select" class="block text-sm font-medium text-gray-700 mb-1">種別</label>
-          <select
-            id="task_detail__task_type_select"
-            v-model="form.task_type"
-            data-testid="task-type-select"
-            class="w-full border border-gray-300 rounded px-3 py-2 text-sm"
-          >
-            <option value="task">タスク</option>
-            <option value="item">親項目</option>
-          </select>
-          <p v-if="form.task_type === 'item'" class="text-xs text-gray-500 mt-1">
-            親項目では期間・ステータス等は管理しません。
-          </p>
-        </div>
-
         <!-- 説明（タスク／親項目どちらでも編集可能） -->
         <div>
           <label for="task_detail__description_textarea" class="block text-sm font-medium text-gray-700 mb-1">説明</label>
@@ -165,6 +173,24 @@ const statusColor = (status: string): string => {
             rows="3"
             class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
+        </div>
+
+        <!-- TMレビュー者（item の場合のみ） -->
+        <div v-if="form.task_type === 'item'">
+          <label for="task_detail__tm_reviewer_select" class="block text-sm font-medium text-gray-700 mb-1">TMレビュー者</label>
+          <select
+            id="task_detail__tm_reviewer_select"
+            v-model="form.tm_reviewer_id"
+            class="w-full border border-gray-300 rounded px-3 py-2 text-sm"
+          >
+            <option value="">未設定</option>
+            <option v-for="m in members" :key="m.user_id" :value="m.user_id">
+              {{ m.user_name }}
+            </option>
+          </select>
+          <p class="text-xs text-gray-500 mt-1">
+            この項目配下の TMRV タスクは、このレビュー者の予定にスケジュールされます。
+          </p>
         </div>
 
         <!-- item の場合は以下の入力欄をすべて非表示にする -->
@@ -192,10 +218,13 @@ const statusColor = (status: string): string => {
           <select id="task_detail__task_kind_select" v-model="form.task_kind" class="w-full border border-gray-300 rounded px-3 py-2 text-sm">
             <option :value="null">未設定</option>
             <option value="実装">実装</option>
-            <option value="ドキュメント作成">ドキュメント作成</option>
-            <option value="レビュー依頼">レビュー依頼</option>
+            <option value="TMRV">TMRV</option>
+            <option value="PJRV">PJRV</option>
             <option value="レビュー修正">レビュー修正</option>
           </select>
+          <p class="text-xs text-gray-500 mt-1">
+            TMRV/PJRV はそれぞれ親項目のTMレビュー者／プロジェクトのPJレビュー者にスケジュールされます。
+          </p>
         </div>
 
         <!-- 開始日・終了日 -->

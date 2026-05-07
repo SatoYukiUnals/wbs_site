@@ -32,7 +32,7 @@ const handleLogout = () => {
 </script>
 
 <template>
-  <div id="app_layout__container" class="min-h-screen bg-gray-100 flex">
+  <div id="app_layout__container" class="h-screen bg-gray-100 flex overflow-hidden">
 
     <!-- サイドバー -->
     <aside id="app_layout__sidebar" class="w-52 bg-gray-900 text-gray-200 flex-shrink-0 flex flex-col">
@@ -89,6 +89,24 @@ const handleLogout = () => {
             title="テンプレート追加"
           >＋</router-link>
         </div>
+
+        <router-link
+          v-if="isAdmin"
+          to="/users"
+          class="flex items-center gap-2 px-3 py-2 rounded hover:bg-gray-700 transition-colors"
+          active-class="bg-gray-700 text-white"
+        >
+          <span>ユーザー管理</span>
+        </router-link>
+
+        <router-link
+          v-if="authStore.currentUser?.role === 'master'"
+          to="/tenant"
+          class="flex items-center gap-2 px-3 py-2 rounded hover:bg-gray-700 transition-colors"
+          active-class="bg-gray-700 text-white"
+        >
+          <span>テナント設定</span>
+        </router-link>
 
         <!-- プロジェクト内メニュー -->
         <template v-if="projectId && currentProject">
@@ -172,9 +190,11 @@ const handleLogout = () => {
       </div>
     </aside>
 
-    <!-- メインコンテンツ -->
-    <main id="app_layout__main" class="flex-1 overflow-auto">
-      <div class="px-4 py-4">
+    <!-- メインコンテンツ
+         ルール: ページ全体（ブラウザウィンドウ）にはスクロールを発生させない。
+         各 view 側で必要な領域だけ overflow-auto を付ける形で内側スクロールに揃える。 -->
+    <main id="app_layout__main" class="flex-1 overflow-hidden flex flex-col">
+      <div class="flex-1 overflow-hidden px-4 py-4 flex flex-col min-h-0">
         <slot />
       </div>
     </main>

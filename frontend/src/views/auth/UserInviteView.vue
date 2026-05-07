@@ -2,6 +2,7 @@
 // 01-02-05 ユーザー招待画面
 import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { api } from '@/api'
 import type { UserRole } from '@/types'
 
 const router = useRouter()
@@ -10,28 +11,33 @@ const form = reactive({ email: '', role: 'member' as UserRole })
 const errors = reactive({ email: '', role: '' })
 const isLoading = ref(false)
 const successMessage = ref('')
+const inviteToken = ref('')
+const apiError = ref('')
 
-/**
- * バリデーション処理
- * @returns バリデーション成功時はtrue
- */
 const validate = (): boolean => {
   errors.email = form.email ? '' : 'メールアドレスは必須です'
   return !errors.email
 }
 
-/**
- * 招待メール送信ボタン押下時の処理
- * バリデーション後、MOCKで成功メッセージを表示してユーザー管理画面へ遷移する
- */
 const handleSubmit = async () => {
   if (!validate()) return
   isLoading.value = true
-  // MOCK：非同期処理をシミュレート
-  await new Promise(r => setTimeout(r, 500))
-  isLoading.value = false
-  successMessage.value = `${form.email} に招待メールを送信しました`
-  setTimeout(() => router.push('/users'), 1500)
+  apiError.value = ''
+  try {
+    const res = await api.auth.invite(form.email, form.role)
+    successMessage.value =
+      `${form.email} の招待を作成しました（有効期限: ${new Date(res.expires_at).toLocaleString()}）`
+    inviteToken.value = res.token
+  } catch (err) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const e = err as any
+    apiError.value =
+      e.response?.data?.detail ??
+      e.response?.data?.email?.[0] ??
+      '招待の作成に失敗しました'
+  } finally {
+    isLoading.value = false
+  }
 }
 </script>
 
@@ -46,9 +52,13 @@ const handleSubmit = async () => {
 
     <div class="bg-white rounded-lg shadow p-6">
       <!-- 成功メッセージ -->
-      <p v-if="successMessage" class="text-green-600 text-sm mb-4 bg-green-50 p-3 rounded">
-        {{ successMessage }}
-      </p>
+      <div v-if="successMessage" class="mb-4 bg-green-50 p-3 rounded text-sm">
+        <p class="text-green-700 mb-1">{{ successMessage }}</p>
+        <p v-if="inviteToken" class="text-xs text-green-700 break-all">
+          招待リンク：<code class="bg-white border border-green-200 px-1 rounded">/invitations/{{ inviteToken }}/accept/</code>
+        </p>
+      </div>
+      <p v-if="apiError" class="text-sm text-red-600 mb-4 bg-red-50 p-3 rounded">{{ apiError }}</p>
 
       <form id="user_invite__form" @submit.prevent="handleSubmit" class="space-y-4">
         <div>

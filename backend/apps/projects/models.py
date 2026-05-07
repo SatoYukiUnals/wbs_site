@@ -27,8 +27,18 @@ class Project(models.Model):
         related_name='created_projects',
         verbose_name='作成者',
     )
+    pj_reviewer = models.ForeignKey(
+        'accounts.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='pj_reviewing_projects',
+        verbose_name='PJレビュー者',
+    )
     # 論理削除フィールド
-    deleted_at = models.DateTimeField(null=True, blank=True, verbose_name='削除日時')
+    deleted_at = models.DateTimeField(
+        null=True, blank=True, verbose_name='削除日時',
+    )
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='作成日時')
 
     class Meta:
@@ -100,6 +110,65 @@ class Quarter(models.Model):
 
     def __str__(self):
         return f'{self.project.name} / {self.title}'
+
+
+class WorkingHourSetting(models.Model):
+    """プロジェクトごとの 1日あたり稼働時間設定"""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    project = models.OneToOneField(
+        Project,
+        on_delete=models.CASCADE,
+        related_name='working_hour_setting',
+        verbose_name='プロジェクト',
+    )
+    daily_hours = models.DecimalField(
+        max_digits=4,
+        decimal_places=1,
+        default=8.0,
+        verbose_name='1日あたりの稼働時間',
+    )
+    # PJRV タスクは工数 0 として扱い、ここで指定された営業日数のスペースだけ予約する。
+    # この期間の影響を受けるのは同レイヤ（同じ親項目配下）の「PJRV修正」のみ。
+    pjrv_buffer_days = models.PositiveSmallIntegerField(
+        default=3,
+        verbose_name='PJRVバッファ営業日数',
+    )
+
+    class Meta:
+        verbose_name = '稼働時間設定'
+        verbose_name_plural = '稼働時間設定一覧'
+
+    def __str__(self):
+        return f'{self.project.name}: {self.daily_hours}h/day'
+
+
+class UserPto(models.Model):
+    """ユーザーごとの有休日（プロジェクト単位）"""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    project = models.ForeignKey(
+        Project,
+        on_delete=models.CASCADE,
+        related_name='user_ptos',
+        verbose_name='プロジェクト',
+    )
+    user = models.ForeignKey(
+        'accounts.User',
+        on_delete=models.CASCADE,
+        related_name='ptos',
+        verbose_name='ユーザー',
+    )
+    date = models.DateField(verbose_name='有休日')
+
+    class Meta:
+        verbose_name = '有休日'
+        verbose_name_plural = '有休日一覧'
+        unique_together = [('project', 'user', 'date')]
+        ordering = ['date']
+
+    def __str__(self):
+        return f'{self.user.username} @ {self.date}'
 
 
 class AutoAssignLog(models.Model):

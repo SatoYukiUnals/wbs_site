@@ -14,6 +14,7 @@ const router = createRouter({
     { path: '/users', name: 'users', component: () => import('@/views/auth/UserManagementView.vue') },
     { path: '/users/invite', name: 'user-invite', component: () => import('@/views/auth/UserInviteView.vue') },
     { path: '/profile', name: 'profile', component: () => import('@/views/auth/ProfileView.vue') },
+    { path: '/tenant', name: 'tenant-settings', component: () => import('@/views/auth/TenantSettingsView.vue') },
 
     // ダッシュボード
     { path: '/', redirect: '/dashboard' },
@@ -33,6 +34,7 @@ const router = createRouter({
 
     // WBS・タスク管理
     { path: '/projects/:projectId/wbs', name: 'wbs', component: () => import('@/views/task/WbsListView.vue') },
+    { path: '/projects/:projectId/wbs/edit', name: 'wbs-edit', component: () => import('@/views/task/WbsEditView.vue') },
     { path: '/projects/:projectId/tasks/:taskId', name: 'task-detail', component: () => import('@/views/task/TaskDetailView.vue') },
     { path: '/projects/:projectId/auto-assign', name: 'auto-assign', component: () => import('@/views/task/AutoAssignView.vue') },
     { path: '/projects/:projectId/recent', name: 'recent-tasks', component: () => import('@/views/task/RecentTasksView.vue') },
@@ -41,12 +43,7 @@ const router = createRouter({
     // ガントチャート
     { path: '/projects/:projectId/gantt', name: 'gantt', component: () => import('@/views/gantt/GanttView.vue') },
 
-    // プロダクトロードマップ
-    { path: '/projects/:projectId/roadmap', name: 'roadmap', component: () => import('@/views/roadmap/RoadmapView.vue') },
-    { path: '/projects/:projectId/roadmap/new', name: 'roadmap-item-create', component: () => import('@/views/roadmap/RoadmapItemCreateView.vue') },
-    { path: '/projects/:projectId/roadmap/:itemId/edit', name: 'roadmap-item-edit', component: () => import('@/views/roadmap/RoadmapItemEditView.vue') },
-
-    // レビュー管理
+// レビュー管理
     { path: '/projects/:projectId/reviews', name: 'reviews', component: () => import('@/views/review/ReviewListView.vue') },
     { path: '/projects/:projectId/tasks/:taskId/reviews', name: 'review-detail', component: () => import('@/views/review/ReviewDetailView.vue') },
 

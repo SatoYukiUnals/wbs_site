@@ -101,7 +101,7 @@ def _calc_visible_ids(all_tasks, quarter_id=None, start_date=None, end_date=None
     return matched | ancestors
 
 
-def _walk_tree(roots, children_map, visible_ids=None, max_depth=3):
+def _walk_tree(roots, children_map, visible_ids=None, max_depth=4):
     """深さ優先でツリーを走査してフラットリストを返す"""
     result = []
 
@@ -133,14 +133,14 @@ def _collect_actual_tasks(task, children_map):
 # Sheet 1: WBS
 # ============================================================
 
-_DEPTH_FILLS = ['EFF3FF', 'F5F5F5', 'FFFFFF', 'FAFAFA']
-_INDENT = ['', '  ', '    ', '      ']
+_DEPTH_FILLS = ['EFF3FF', 'F5F5F5', 'FFFFFF', 'FAFAFA', 'FFFFFF']
+_INDENT = ['', '  ', '    ', '      ', '        ']
 
 def _build_wbs_sheet(ws, project, quarter_id, start_date, end_date):
     all_tasks = _load_tasks(project)
     visible_ids = _calc_visible_ids(all_tasks, quarter_id, start_date, end_date)
     roots, children_map = _build_children_map(all_tasks)
-    tasks = _walk_tree(roots, children_map, visible_ids, max_depth=3)
+    tasks = _walk_tree(roots, children_map, visible_ids, max_depth=4)
 
     headers = [
         'WBS No', 'タスク名', '種別', 'ステータス',
@@ -157,7 +157,7 @@ def _build_wbs_sheet(ws, project, quarter_id, start_date, end_date):
         quarter_title = task.quarter.title if task.quarter else ''
         estimated = float(task.estimated_hours) if task.estimated_hours else ''
         progress = f'{task.progress}%'
-        depth = min(task.depth, 3)
+        depth = min(task.depth, 4)
 
         ws.append([
             task.wbs_no,
@@ -264,7 +264,7 @@ def _build_recent_sheet(ws, project, start_date, end_date):
 def _build_progress_sheet(ws, project):
     all_tasks = _load_tasks(project)
     roots, children_map = _build_children_map(all_tasks)
-    nodes = _walk_tree(roots, children_map, visible_ids=None, max_depth=3)
+    nodes = _walk_tree(roots, children_map, visible_ids=None, max_depth=4)
     today = date.today()
 
     headers = [

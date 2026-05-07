@@ -2,39 +2,71 @@
 // 01-01-01 テナント登録画面
 import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { api, setTokens } from '@/api'
 import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
 const authStore = useAuthStore()
 
-const form = reactive({ tenant_name: '', email: '', password: '', password_confirm: '' })
-const errors = reactive({ tenant_name: '', email: '', password: '', password_confirm: '' })
+const form = reactive({
+  tenant_name: '',
+  username: '',
+  email: '',
+  password: '',
+  password_confirm: '',
+})
+const errors = reactive({
+  tenant_name: '',
+  username: '',
+  email: '',
+  password: '',
+  password_confirm: '',
+})
 const isLoading = ref(false)
+const apiError = ref('')
 
-/**
- * バリデーション処理
- * @returns バリデーション成功時はtrue
- */
 const validate = (): boolean => {
-  let ok = true
   errors.tenant_name = form.tenant_name ? '' : 'テナント名は必須です'
+  errors.username = form.username ? '' : 'マスターユーザー名は必須です'
   errors.email = form.email ? '' : 'メールアドレスは必須です'
-  errors.password = form.password ? '' : 'パスワードは必須です'
-  errors.password_confirm = form.password_confirm === form.password ? '' : 'パスワードが一致しません'
-  if (errors.tenant_name || errors.email || errors.password || errors.password_confirm) ok = false
-  return ok
+  errors.password = form.password.length >= 8
+    ? '' : 'パスワードは8文字以上で入力してください'
+  errors.password_confirm = form.password_confirm === form.password
+    ? '' : 'パスワードが一致しません'
+  return !(errors.tenant_name || errors.username || errors.email
+    || errors.password || errors.password_confirm)
 }
 
-/**
- * テナント登録ボタン押下時の処理
- * バリデーション後、MOCKログインしてダッシュボードへ遷移する
- */
 const handleSubmit = async () => {
   if (!validate()) return
   isLoading.value = true
-  authStore.login(form.email, form.password)
-  isLoading.value = false
-  router.push('/dashboard')
+  apiError.value = ''
+  try {
+    const res = await api.auth.registerTenant({
+      tenant_name: form.tenant_name,
+      username: form.username,
+      email: form.email,
+      password: form.password,
+    })
+    // トークン保存とログイン状態の反映
+    setTokens(res.access, res.refresh)
+    authStore.currentUser = res.user
+    authStore.isLoggedIn = true
+    router.push('/dashboard')
+  } catch (err) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const e = err as any
+    const data = e.response?.data ?? {}
+    apiError.value =
+      data.detail ??
+      data.tenant_name?.[0] ??
+      data.email?.[0] ??
+      data.username?.[0] ??
+      data.password?.[0] ??
+      'テナント登録に失敗しました'
+  } finally {
+    isLoading.value = false
+  }
 }
 </script>
 
@@ -57,6 +89,19 @@ const handleSubmit = async () => {
         </div>
 
         <div>
+          <label for="tenant_register__username_input" class="block text-sm font-medium text-gray-700 mb-1">マスターユーザー名 <span class="text-red-500">*</span></label>
+          <input
+            id="tenant_register__username_input"
+            v-model="form.username"
+            type="text"
+            data-testid="register-username"
+            class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="例: 山田太郎"
+          />
+          <p v-if="errors.username" class="text-red-500 text-xs mt-1">{{ errors.username }}</p>
+        </div>
+
+        <div>
           <label for="tenant_register__email_input" class="block text-sm font-medium text-gray-700 mb-1">メールアドレス <span class="text-red-500">*</span></label>
           <input
             id="tenant_register__email_input"
@@ -69,11 +114,12 @@ const handleSubmit = async () => {
         </div>
 
         <div>
-          <label for="tenant_register__password_input" class="block text-sm font-medium text-gray-700 mb-1">パスワード <span class="text-red-500">*</span></label>
+          <label for="tenant_register__password_input" class="block text-sm font-medium text-gray-700 mb-1">パスワード（8文字以上）<span class="text-red-500">*</span></label>
           <input
             id="tenant_register__password_input"
             v-model="form.password"
             type="password"
+            autocomplete="new-password"
             data-testid="register-password"
             class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
@@ -86,11 +132,14 @@ const handleSubmit = async () => {
             id="tenant_register__password_confirm_input"
             v-model="form.password_confirm"
             type="password"
+            autocomplete="new-password"
             data-testid="register-password-confirm"
             class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
           <p v-if="errors.password_confirm" class="text-red-500 text-xs mt-1">{{ errors.password_confirm }}</p>
         </div>
+
+        <p v-if="apiError" class="text-sm text-red-600 bg-red-50 p-3 rounded">{{ apiError }}</p>
 
         <button
           id="tenant_register__submit_btn"

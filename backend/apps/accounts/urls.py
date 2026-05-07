@@ -9,7 +9,10 @@ from .views import (
     InvitationAcceptView,
     LogoutView,
     ProfileView,
+    TenantHolidayView,
     TenantRegisterView,
+    TenantView,
+    UserCreateView,
     UserDeleteView,
     UserInviteView,
     UserListView,
@@ -28,11 +31,28 @@ urlpatterns = [
     # プロフィール
     path('profile/', ProfileView.as_view(), name='profile'),
 
+    # テナント設定
+    path('tenant/', TenantView.as_view(), name='tenant'),
+    path(
+        'tenant/holidays/',
+        TenantHolidayView.as_view(),
+        name='tenant-holidays',
+    ),
+
     # ユーザー管理
     path('users/', UserListView.as_view(), name='user-list'),
+    path('users/create/', UserCreateView.as_view(), name='user-create'),
     path('users/invite/', UserInviteView.as_view(), name='user-invite'),
-    path('users/<uuid:user_id>/role/', UserRoleUpdateView.as_view(), name='user-role-update'),
-    path('users/<uuid:user_id>/', UserDeleteView.as_view(), name='user-delete'),
+    path(
+        'users/<uuid:user_id>/role/',
+        UserRoleUpdateView.as_view(),
+        name='user-role-update',
+    ),
+    path(
+        'users/<uuid:user_id>/',
+        UserDeleteView.as_view(),
+        name='user-detail',
+    ),
 
     # 招待承諾（認証不要）
     path('invitations/<str:token>/accept/', InvitationAcceptView.as_view(), name='invitation-accept'),

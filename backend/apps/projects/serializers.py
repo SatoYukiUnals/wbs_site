@@ -5,7 +5,14 @@ from rest_framework import serializers
 
 from apps.accounts.serializers import UserSerializer
 
-from .models import AutoAssignLog, Project, ProjectMember, Quarter
+from .models import (
+    AutoAssignLog,
+    Project,
+    ProjectMember,
+    Quarter,
+    UserPto,
+    WorkingHourSetting,
+)
 
 
 class ProjectMemberSerializer(serializers.ModelSerializer):
@@ -22,7 +29,12 @@ class ProjectMemberSerializer(serializers.ModelSerializer):
 class ProjectSerializer(serializers.ModelSerializer):
     """プロジェクトシリアライザー"""
 
-    created_by_name = serializers.CharField(source='created_by.username', read_only=True)
+    created_by_name = serializers.CharField(
+        source='created_by.username', read_only=True,
+    )
+    pj_reviewer_name = serializers.CharField(
+        source='pj_reviewer.username', read_only=True, default=None,
+    )
 
     class Meta:
         model = Project
@@ -30,9 +42,13 @@ class ProjectSerializer(serializers.ModelSerializer):
             'id', 'tenant', 'name', 'description',
             'progress',
             'created_by', 'created_by_name',
+            'pj_reviewer', 'pj_reviewer_name',
             'deleted_at', 'created_at',
         ]
-        read_only_fields = ['id', 'tenant', 'progress', 'created_by', 'deleted_at', 'created_at']
+        read_only_fields = [
+            'id', 'tenant', 'progress', 'created_by',
+            'deleted_at', 'created_at',
+        ]
 
     def create(self, validated_data):
         """プロジェクト作成時にテナント・作成者を自動設定する"""
@@ -52,6 +68,28 @@ class QuarterSerializer(serializers.ModelSerializer):
         model = Quarter
         fields = ['id', 'project', 'title', 'start_date', 'end_date', 'progress']
         read_only_fields = ['id', 'project', 'progress']
+
+
+class WorkingHourSettingSerializer(serializers.ModelSerializer):
+    """稼働時間設定シリアライザー"""
+
+    class Meta:
+        model = WorkingHourSetting
+        fields = ['id', 'project', 'daily_hours', 'pjrv_buffer_days']
+        read_only_fields = ['id', 'project']
+
+
+class UserPtoSerializer(serializers.ModelSerializer):
+    """有休日シリアライザー"""
+
+    user_name = serializers.CharField(
+        source='user.username', read_only=True,
+    )
+
+    class Meta:
+        model = UserPto
+        fields = ['id', 'project', 'user', 'user_name', 'date']
+        read_only_fields = ['id', 'project']
 
 
 class AutoAssignLogSerializer(serializers.ModelSerializer):

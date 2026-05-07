@@ -8,12 +8,28 @@ from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, Permis
 from django.db import models
 
 
+def _default_holiday_weekdays():
+    """新規テナントの既定の休日曜日（土・日）"""
+    return [5, 6]
+
+
 class Tenant(models.Model):
     """テナント（組織）モデル"""
 
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    name = models.CharField(max_length=100, unique=True, verbose_name='テナント名')
-    created_at = models.DateTimeField(auto_now_add=True, verbose_name='作成日時')
+    id = models.UUIDField(
+        primary_key=True, default=uuid.uuid4, editable=False,
+    )
+    name = models.CharField(
+        max_length=100, unique=True, verbose_name='テナント名',
+    )
+    # 休みの曜日（0=月 ... 6=日）。既定は土日
+    holiday_weekdays = models.JSONField(
+        default=_default_holiday_weekdays,
+        verbose_name='休みの曜日',
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True, verbose_name='作成日時',
+    )
 
     class Meta:
         verbose_name = 'テナント'
@@ -21,6 +37,33 @@ class Tenant(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class TenantHoliday(models.Model):
+    """会社休日（テナント単位の特定日）"""
+
+    id = models.UUIDField(
+        primary_key=True, default=uuid.uuid4, editable=False,
+    )
+    tenant = models.ForeignKey(
+        Tenant,
+        on_delete=models.CASCADE,
+        related_name='holidays',
+        verbose_name='テナント',
+    )
+    date = models.DateField(verbose_name='日付')
+    name = models.CharField(
+        max_length=100, blank=True, verbose_name='名称',
+    )
+
+    class Meta:
+        verbose_name = 'テナント休日'
+        verbose_name_plural = 'テナント休日一覧'
+        unique_together = [('tenant', 'date')]
+        ordering = ['date']
+
+    def __str__(self):
+        return f'{self.tenant.name} @ {self.date}'
 
 
 class UserManager(BaseUserManager):
@@ -75,6 +118,14 @@ class User(AbstractBaseUser, PermissionsMixin):
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='作成日時')
     is_active = models.BooleanField(default=True, verbose_name='有効フラグ')
     is_staff = models.BooleanField(default=False, verbose_name='スタッフフラグ')
+    # 工数倍率：自動割り振りで利用する。新人=0.5、別 PJ 並行で 0.5 など。
+    # 値が小さいほど 1 タスク消化に必要な日数が増える（hours / multiplier）。
+    productivity_multiplier = models.DecimalField(
+        max_digits=4,
+        decimal_places=2,
+        default=1.0,
+        verbose_name='工数倍率',
+    )
 
     objects = UserManager()
 

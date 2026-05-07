@@ -18,8 +18,8 @@ class Task(models.Model):
     # タスク分類
     TASK_KIND_CHOICES = [
         ('実装', '実装'),
-        ('ドキュメント作成', 'ドキュメント作成'),
-        ('レビュー依頼', 'レビュー依頼'),
+        ('TMRV', 'TMRV'),
+        ('PJRV', 'PJRV'),
         ('レビュー修正', 'レビュー修正'),
     ]
     # ステータス
@@ -99,10 +99,27 @@ class Task(models.Model):
         default='中',
         verbose_name='優先度',
     )
-    actual_start_date = models.DateField(null=True, blank=True, verbose_name='実際の開始日')
-    actual_end_date = models.DateField(null=True, blank=True, verbose_name='実際の終了日')
+    actual_start_date = models.DateField(
+        null=True, blank=True, verbose_name='実際の開始日',
+    )
+    actual_end_date = models.DateField(
+        null=True, blank=True, verbose_name='実際の終了日',
+    )
+    dates_manual = models.BooleanField(
+        default=False, verbose_name='日付手動入力フラグ',
+    )
+    tm_reviewer = models.ForeignKey(
+        'accounts.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='tm_reviewing_items',
+        verbose_name='TMレビュー者',
+    )
     # 論理削除フィールド
-    deleted_at = models.DateTimeField(null=True, blank=True, verbose_name='削除日時')
+    deleted_at = models.DateTimeField(
+        null=True, blank=True, verbose_name='削除日時',
+    )
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='作成日時')
     # ツリーの深さ（0=ルート）
     depth = models.IntegerField(default=0, verbose_name='深さ')

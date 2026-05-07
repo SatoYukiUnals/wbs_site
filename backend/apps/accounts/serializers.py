@@ -8,7 +8,7 @@ from django.utils import timezone
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
-from .models import Invitation, Tenant, User
+from .models import Invitation, Tenant, TenantHoliday, User
 
 
 class TenantSerializer(serializers.ModelSerializer):
@@ -16,8 +16,31 @@ class TenantSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Tenant
-        fields = ['id', 'name', 'created_at']
+        fields = ['id', 'name', 'holiday_weekdays', 'created_at']
         read_only_fields = ['id', 'created_at']
+
+    def validate_holiday_weekdays(self, value):
+        """0..6 の整数のみ・重複は除く"""
+        if not isinstance(value, list):
+            raise serializers.ValidationError('リスト形式で指定してください。')
+        cleaned = []
+        for v in value:
+            if not isinstance(v, int) or v < 0 or v > 6:
+                raise serializers.ValidationError(
+                    '0〜6 の整数で指定してください（0=月,6=日）。',
+                )
+            if v not in cleaned:
+                cleaned.append(v)
+        return sorted(cleaned)
+
+
+class TenantHolidaySerializer(serializers.ModelSerializer):
+    """会社休日シリアライザー"""
+
+    class Meta:
+        model = TenantHoliday
+        fields = ['id', 'tenant', 'date', 'name']
+        read_only_fields = ['id', 'tenant']
 
 
 class TenantRegisterSerializer(serializers.Serializer):
@@ -54,7 +77,10 @@ class UserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['id', 'tenant', 'tenant_name', 'username', 'email', 'role', 'created_at', 'is_active']
+        fields = [
+            'id', 'tenant', 'tenant_name', 'username', 'email', 'role',
+            'created_at', 'is_active', 'productivity_multiplier',
+        ]
         read_only_fields = ['id', 'tenant', 'tenant_name', 'created_at']
 
 
@@ -131,6 +157,78 @@ class UserRoleUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ['role']
+
+
+class UserUpdateSerializer(serializers.ModelSerializer):
+    """ユーザー情報更新シリアライザー（master が編集）
+
+    password は書き込み専用・空文字なら変更しない。email は重複チェックあり。
+    """
+
+    password = serializers.CharField(
+        write_only=True, required=False, allow_blank=True, min_length=8,
+    )
+
+    class Meta:
+        model = User
+        fields = ['username', 'email', 'role', 'password', 'productivity_multiplier']
+        extra_kwargs = {
+            'username': {'required': False},
+            'email': {'required': False},
+            'role': {'required': False},
+            'productivity_multiplier': {'required': False},
+        }
+
+    def validate_email(self, value):
+        # 自分以外で同じメールが存在しないか
+        qs = User.objects.exclude(id=self.instance.id).filter(email=value)
+        if qs.exists():
+            raise serializers.ValidationError(
+                'このメールアドレスは既に使用されています。',
+            )
+        return value
+
+    def update(self, instance, validated_data):
+        password = validated_data.pop('password', None)
+        for k, v in validated_data.items():
+            setattr(instance, k, v)
+        if password:
+            instance.set_password(password)
+        instance.save()
+        return instance
+
+
+class UserCreateSerializer(serializers.ModelSerializer):
+    """ユーザー直接登録シリアライザー（master のみ・招待を介さない）"""
+
+    password = serializers.CharField(write_only=True, min_length=8)
+
+    class Meta:
+        model = User
+        fields = ['username', 'email', 'password', 'role', 'productivity_multiplier']
+        extra_kwargs = {
+            'productivity_multiplier': {'required': False},
+        }
+
+    def validate_email(self, value):
+        if User.objects.filter(email=value).exists():
+            raise serializers.ValidationError(
+                'このメールアドレスは既に使用されています。',
+            )
+        return value
+
+    def create(self, validated_data):
+        tenant = self.context['request'].user.tenant
+        multiplier = validated_data.get('productivity_multiplier')
+        user = User.objects.create_user(
+            email=validated_data['email'],
+            username=validated_data['username'],
+            tenant=tenant,
+            password=validated_data['password'],
+            role=validated_data.get('role', 'member'),
+            **({'productivity_multiplier': multiplier} if multiplier is not None else {}),
+        )
+        return user
 
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):

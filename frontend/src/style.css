@@ -2,6 +2,16 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * 画面全体（ブラウザのウィンドウ）には縦・横スクロールを発生させない方針。
+ * 内側の表やリスト等の領域だけが overflow-auto / overflow-x-auto などで
+ * 個別にスクロールする。
+ */
+html, body, #app {
+  height: 100%;
+  overflow: hidden;
+}
+
 body {
   margin: 0;
   font-family: system-ui, 'Segoe UI', Roboto, sans-serif;

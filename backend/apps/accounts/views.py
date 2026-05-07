@@ -8,16 +8,20 @@ from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
-from .models import User
+from .models import Tenant, TenantHoliday, User
 from .permissions import IsAdminOrAbove, IsMasterOnly
 from .serializers import (
     CustomTokenObtainPairSerializer,
     InvitationAcceptSerializer,
     ProfileUpdateSerializer,
+    TenantHolidaySerializer,
     TenantRegisterSerializer,
+    TenantSerializer,
+    UserCreateSerializer,
     UserInviteSerializer,
     UserRoleUpdateSerializer,
     UserSerializer,
+    UserUpdateSerializer,
 )
 
 
@@ -95,7 +99,25 @@ class UserListView(generics.ListAPIView):
 
     def get_queryset(self):
         """ログインユーザーと同テナントのユーザーのみ返す"""
-        return User.objects.filter(tenant=self.request.user.tenant).order_by('created_at')
+        return User.objects.filter(
+            tenant=self.request.user.tenant,
+        ).order_by('created_at')
+
+
+class UserCreateView(APIView):
+    """ユーザー直接登録エンドポイント（master のみ）"""
+
+    permission_classes = [permissions.IsAuthenticated, IsMasterOnly]
+
+    def post(self, request):
+        serializer = UserCreateSerializer(
+            data=request.data, context={'request': request},
+        )
+        serializer.is_valid(raise_exception=True)
+        user = serializer.save()
+        return Response(
+            UserSerializer(user).data, status=status.HTTP_201_CREATED,
+        )
 
 
 class UserInviteView(APIView):
@@ -162,22 +184,136 @@ class UserRoleUpdateView(APIView):
         return Response(UserSerializer(user).data)
 
 
-class UserDeleteView(APIView):
-    """ユーザー削除エンドポイント（master のみ）"""
+class UserDetailView(APIView):
+    """ユーザー詳細・更新・削除エンドポイント（master のみ）"""
 
     permission_classes = [permissions.IsAuthenticated, IsMasterOnly]
+
+    def patch(self, request, user_id):
+        """対象ユーザーの表示名・ロールを更新する"""
+        try:
+            user = User.objects.get(
+                id=user_id, tenant=request.user.tenant,
+            )
+        except User.DoesNotExist:
+            return Response(
+                {'detail': 'ユーザーが見つかりません。'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        serializer = UserUpdateSerializer(
+            user, data=request.data, partial=True,
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(UserSerializer(user).data)
 
     def delete(self, request, user_id):
         """対象ユーザーを無効化する（論理削除）"""
         try:
-            user = User.objects.get(id=user_id, tenant=request.user.tenant)
+            user = User.objects.get(
+                id=user_id, tenant=request.user.tenant,
+            )
         except User.DoesNotExist:
-            return Response({'detail': 'ユーザーが見つかりません。'}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {'detail': 'ユーザーが見つかりません。'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
 
         # 自分自身は削除できない
         if user == request.user:
-            return Response({'detail': '自分自身は削除できません。'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {'detail': '自分自身は削除できません。'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         user.is_active = False
         user.save()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# 後方互換のため別名も維持
+UserDeleteView = UserDetailView
+
+
+class TenantHolidayView(APIView):
+    """会社休日（テナント休日）一覧・追加・削除"""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        holidays = TenantHoliday.objects.filter(tenant=request.user.tenant)
+        return Response(TenantHolidaySerializer(holidays, many=True).data)
+
+    def post(self, request):
+        if request.user.role != 'master':
+            return Response(
+                {'detail': 'master ロールのみ追加できます。'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        date_str = request.data.get('date')
+        name = request.data.get('name', '')
+        if not date_str:
+            return Response(
+                {'detail': 'date は必須です。'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        holiday, _ = TenantHoliday.objects.get_or_create(
+            tenant=request.user.tenant,
+            date=date_str,
+            defaults={'name': name},
+        )
+        return Response(
+            TenantHolidaySerializer(holiday).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+    def delete(self, request):
+        if request.user.role != 'master':
+            return Response(
+                {'detail': 'master ロールのみ削除できます。'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        date_str = (
+            request.query_params.get('date') or request.data.get('date')
+        )
+        if not date_str:
+            return Response(
+                {'detail': 'date は必須です。'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        TenantHoliday.objects.filter(
+            tenant=request.user.tenant, date=date_str,
+        ).delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class TenantView(APIView):
+    """ログインユーザーのテナント情報取得・更新（master のみ更新可）"""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        return Response(TenantSerializer(request.user.tenant).data)
+
+    def patch(self, request):
+        if request.user.role != 'master':
+            return Response(
+                {'detail': 'master ロールのみ更新できます。'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        tenant = request.user.tenant
+        serializer = TenantSerializer(
+            tenant, data=request.data, partial=True,
+        )
+        serializer.is_valid(raise_exception=True)
+        # 自テナント以外との重複だけチェック
+        new_name = serializer.validated_data.get('name')
+        if new_name and Tenant.objects.exclude(id=tenant.id).filter(
+            name=new_name,
+        ).exists():
+            return Response(
+                {'detail': 'このテナント名はすでに使用されています。'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        serializer.save()
+        return Response(serializer.data)

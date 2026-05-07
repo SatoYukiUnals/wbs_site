@@ -3,7 +3,7 @@
 
 import type {
   User, Project, Quarter, Task, Review, ReviewComment, ReviewHistory,
-  RoadmapItem, Template, AutoAssignPreview, ProjectSummary, MyTask, ProjectMember
+  Template, AutoAssignPreview, ProjectSummary, MyTask, ProjectMember
 } from '@/types'
 
 /** sort_order・childrenを除いた生タスク型 */
@@ -72,7 +72,7 @@ export const mockTasks: Task[] = withSortOrders([
     start_date: '2026-04-01', end_date: '2026-05-12',
     actual_start_date: '2026-04-01', actual_end_date: null,
     estimated_hours: null, quarter_id: 'q1', parent_task_id: null,
-    project_id: 'p1', wbs_no: '1', task_type: 'item', depth: 0, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+    project_id: 'p1', wbs_no: '1', task_type: 'item', depth: 0, task_kind: null, tm_reviewer: null, dates_manual: false,
     assignees: [{ id: 'u2', name: '佐藤' }],
     children: [
       // 1.1 基本設計遡形作成
@@ -83,7 +83,7 @@ export const mockTasks: Task[] = withSortOrders([
         start_date: '2026-04-01', end_date: '2026-04-09',
         actual_start_date: '2026-04-01', actual_end_date: '2026-04-09',
         estimated_hours: null, quarter_id: 'q1', parent_task_id: 't1',
-        project_id: 'p1', wbs_no: '1.1', task_type: 'item', depth: 1, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+        project_id: 'p1', wbs_no: '1.1', task_type: 'item', depth: 1, task_kind: null, tm_reviewer: null, dates_manual: false,
         assignees: [{ id: 'u2', name: '佐藤' }],
         children: [
           {
@@ -93,7 +93,7 @@ export const mockTasks: Task[] = withSortOrders([
             start_date: '2026-04-01', end_date: '2026-04-01',
             actual_start_date: '2026-04-01', actual_end_date: '2026-04-02',
             estimated_hours: 0.5, quarter_id: 'q1', parent_task_id: 't1-1',
-            project_id: 'p1', wbs_no: '1.1.1', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+            project_id: 'p1', wbs_no: '1.1.1', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, dates_manual: false,
             assignees: [{ id: 'u2', name: '佐藤' }],
           },
           {
@@ -103,7 +103,7 @@ export const mockTasks: Task[] = withSortOrders([
             start_date: '2026-04-01', end_date: '2026-04-01',
             actual_start_date: '2026-04-02', actual_end_date: '2026-04-02',
             estimated_hours: 1, quarter_id: 'q1', parent_task_id: 't1-1',
-            project_id: 'p1', wbs_no: '1.1.2', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+            project_id: 'p1', wbs_no: '1.1.2', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, dates_manual: false,
             assignees: [{ id: 'u2', name: '佐藤' }],
           },
           {
@@ -113,7 +113,7 @@ export const mockTasks: Task[] = withSortOrders([
             start_date: '2026-04-02', end_date: '2026-04-07',
             actual_start_date: '2026-04-07', actual_end_date: '2026-04-07',
             estimated_hours: 4, quarter_id: 'q1', parent_task_id: 't1-1',
-            project_id: 'p1', wbs_no: '1.1.3', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+            project_id: 'p1', wbs_no: '1.1.3', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, dates_manual: false,
             assignees: [{ id: 'u2', name: '佐藤' }],
           },
           {
@@ -123,7 +123,7 @@ export const mockTasks: Task[] = withSortOrders([
             start_date: '2026-04-07', end_date: '2026-04-08',
             actual_start_date: '2026-04-07', actual_end_date: '2026-04-08',
             estimated_hours: 7, quarter_id: 'q1', parent_task_id: 't1-1',
-            project_id: 'p1', wbs_no: '1.1.4', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+            project_id: 'p1', wbs_no: '1.1.4', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, dates_manual: false,
             assignees: [{ id: 'u2', name: '佐藤' }],
           },
           {
@@ -133,7 +133,7 @@ export const mockTasks: Task[] = withSortOrders([
             start_date: '2026-04-08', end_date: '2026-04-08',
             actual_start_date: '2026-04-08', actual_end_date: '2026-04-08',
             estimated_hours: 0.5, quarter_id: 'q1', parent_task_id: 't1-1',
-            project_id: 'p1', wbs_no: '1.1.5', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+            project_id: 'p1', wbs_no: '1.1.5', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, dates_manual: false,
             assignees: [{ id: 'u3', name: '田中' }],
           },
           {
@@ -143,7 +143,7 @@ export const mockTasks: Task[] = withSortOrders([
             start_date: '2026-04-09', end_date: '2026-04-09',
             actual_start_date: '2026-04-09', actual_end_date: '2026-04-09',
             estimated_hours: 0.5, quarter_id: 'q1', parent_task_id: 't1-1',
-            project_id: 'p1', wbs_no: '1.1.6', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+            project_id: 'p1', wbs_no: '1.1.6', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, dates_manual: false,
             assignees: [{ id: 'u2', name: '佐藤' }],
           },
         ],
@@ -156,7 +156,7 @@ export const mockTasks: Task[] = withSortOrders([
         start_date: '2026-04-08', end_date: '2026-04-14',
         actual_start_date: '2026-04-08', actual_end_date: '2026-04-14',
         estimated_hours: null, quarter_id: 'q1', parent_task_id: 't1',
-        project_id: 'p1', wbs_no: '1.2', task_type: 'item', depth: 1, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+        project_id: 'p1', wbs_no: '1.2', task_type: 'item', depth: 1, task_kind: null, tm_reviewer: null, dates_manual: false,
         assignees: [{ id: 'u2', name: '佐藤' }],
         children: [
           {
@@ -166,7 +166,7 @@ export const mockTasks: Task[] = withSortOrders([
             start_date: '2026-04-08', end_date: '2026-04-08',
             actual_start_date: '2026-04-08', actual_end_date: '2026-04-14',
             estimated_hours: 1, quarter_id: 'q1', parent_task_id: 't1-2',
-            project_id: 'p1', wbs_no: '1.2.1', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+            project_id: 'p1', wbs_no: '1.2.1', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, dates_manual: false,
             assignees: [{ id: 'u2', name: '佐藤' }],
           },
           {
@@ -176,7 +176,7 @@ export const mockTasks: Task[] = withSortOrders([
             start_date: '2026-04-08', end_date: '2026-04-08',
             actual_start_date: '2026-04-08', actual_end_date: '2026-04-14',
             estimated_hours: 0.5, quarter_id: 'q1', parent_task_id: 't1-2',
-            project_id: 'p1', wbs_no: '1.2.2', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+            project_id: 'p1', wbs_no: '1.2.2', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, dates_manual: false,
             assignees: [{ id: 'u2', name: '佐藤' }],
           },
           {
@@ -186,7 +186,7 @@ export const mockTasks: Task[] = withSortOrders([
             start_date: '2026-04-08', end_date: '2026-04-08',
             actual_start_date: '2026-04-08', actual_end_date: '2026-04-14',
             estimated_hours: 1.5, quarter_id: 'q1', parent_task_id: 't1-2',
-            project_id: 'p1', wbs_no: '1.2.3', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+            project_id: 'p1', wbs_no: '1.2.3', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, dates_manual: false,
             assignees: [{ id: 'u2', name: '佐藤' }],
           },
           {
@@ -196,7 +196,7 @@ export const mockTasks: Task[] = withSortOrders([
             start_date: '2026-04-08', end_date: '2026-04-08',
             actual_start_date: '2026-04-08', actual_end_date: '2026-04-14',
             estimated_hours: 0.5, quarter_id: 'q1', parent_task_id: 't1-2',
-            project_id: 'p1', wbs_no: '1.2.4', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+            project_id: 'p1', wbs_no: '1.2.4', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, dates_manual: false,
             assignees: [{ id: 'u2', name: '佐藤' }],
           },
         ],
@@ -209,7 +209,7 @@ export const mockTasks: Task[] = withSortOrders([
         start_date: '2026-04-09', end_date: '2026-04-15',
         actual_start_date: '2026-04-09', actual_end_date: '2026-04-15',
         estimated_hours: null, quarter_id: 'q1', parent_task_id: 't1',
-        project_id: 'p1', wbs_no: '1.3', task_type: 'item', depth: 1, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+        project_id: 'p1', wbs_no: '1.3', task_type: 'item', depth: 1, task_kind: null, tm_reviewer: null, dates_manual: false,
         assignees: [{ id: 'u2', name: '佐藤' }],
         children: [
           {
@@ -219,7 +219,7 @@ export const mockTasks: Task[] = withSortOrders([
             start_date: '2026-04-09', end_date: '2026-04-14',
             actual_start_date: '2026-04-09', actual_end_date: '2026-04-14',
             estimated_hours: 6, quarter_id: 'q1', parent_task_id: 't1-3',
-            project_id: 'p1', wbs_no: '1.3.1', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+            project_id: 'p1', wbs_no: '1.3.1', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, dates_manual: false,
             assignees: [{ id: 'u2', name: '佐藤' }],
           },
           {
@@ -229,7 +229,7 @@ export const mockTasks: Task[] = withSortOrders([
             start_date: '2026-04-15', end_date: '2026-04-15',
             actual_start_date: '2026-04-15', actual_end_date: '2026-04-15',
             estimated_hours: 1, quarter_id: 'q1', parent_task_id: 't1-3',
-            project_id: 'p1', wbs_no: '1.3.2', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+            project_id: 'p1', wbs_no: '1.3.2', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, dates_manual: false,
             assignees: [{ id: 'u3', name: '田中' }],
           },
           {
@@ -239,7 +239,7 @@ export const mockTasks: Task[] = withSortOrders([
             start_date: '2026-04-15', end_date: '2026-04-15',
             actual_start_date: '2026-04-15', actual_end_date: '2026-04-15',
             estimated_hours: 1, quarter_id: 'q1', parent_task_id: 't1-3',
-            project_id: 'p1', wbs_no: '1.3.3', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+            project_id: 'p1', wbs_no: '1.3.3', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, dates_manual: false,
             assignees: [{ id: 'u2', name: '佐藤' }],
           },
         ],
@@ -252,7 +252,7 @@ export const mockTasks: Task[] = withSortOrders([
         start_date: '2026-04-15', end_date: '2026-05-12',
         actual_start_date: '2026-04-14', actual_end_date: null,
         estimated_hours: null, quarter_id: 'q1', parent_task_id: 't1',
-        project_id: 'p1', wbs_no: '1.4', task_type: 'item', depth: 1, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+        project_id: 'p1', wbs_no: '1.4', task_type: 'item', depth: 1, task_kind: null, tm_reviewer: null, dates_manual: false,
         assignees: [{ id: 'u2', name: '佐藤' }],
         children: [
           {
@@ -262,7 +262,7 @@ export const mockTasks: Task[] = withSortOrders([
             start_date: '2026-04-15', end_date: '2026-04-15',
             actual_start_date: '2026-04-14', actual_end_date: '2026-04-15',
             estimated_hours: 3.5, quarter_id: 'q1', parent_task_id: 't1-4',
-            project_id: 'p1', wbs_no: '1.4.1', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+            project_id: 'p1', wbs_no: '1.4.1', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, dates_manual: false,
             assignees: [{ id: 'u2', name: '佐藤' }],
           },
           {
@@ -272,7 +272,7 @@ export const mockTasks: Task[] = withSortOrders([
             start_date: '2026-04-16', end_date: '2026-04-16',
             actual_start_date: '2026-04-15', actual_end_date: '2026-04-16',
             estimated_hours: 6, quarter_id: 'q1', parent_task_id: 't1-4',
-            project_id: 'p1', wbs_no: '1.4.2', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+            project_id: 'p1', wbs_no: '1.4.2', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, dates_manual: false,
             assignees: [{ id: 'u2', name: '佐藤' }],
           },
           {
@@ -282,7 +282,7 @@ export const mockTasks: Task[] = withSortOrders([
             start_date: '2026-04-21', end_date: '2026-04-22',
             actual_start_date: '2026-04-21', actual_end_date: '2026-04-22',
             estimated_hours: 8, quarter_id: 'q1', parent_task_id: 't1-4',
-            project_id: 'p1', wbs_no: '1.4.3', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+            project_id: 'p1', wbs_no: '1.4.3', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, dates_manual: false,
             assignees: [{ id: 'u2', name: '佐藤' }],
           },
           {
@@ -292,7 +292,7 @@ export const mockTasks: Task[] = withSortOrders([
             start_date: '2026-04-23', end_date: '2026-04-23',
             actual_start_date: '2026-04-23', actual_end_date: '2026-04-23',
             estimated_hours: 6, quarter_id: 'q1', parent_task_id: 't1-4',
-            project_id: 'p1', wbs_no: '1.4.4', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+            project_id: 'p1', wbs_no: '1.4.4', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, dates_manual: false,
             assignees: [{ id: 'u2', name: '佐藤' }],
           },
           {
@@ -302,7 +302,7 @@ export const mockTasks: Task[] = withSortOrders([
             start_date: '2026-04-28', end_date: '2026-05-07',
             actual_start_date: null, actual_end_date: null,
             estimated_hours: 8, quarter_id: 'q1', parent_task_id: 't1-4',
-            project_id: 'p1', wbs_no: '1.4.5', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+            project_id: 'p1', wbs_no: '1.4.5', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, dates_manual: false,
             assignees: [{ id: 'u2', name: '佐藤' }],
           },
           {
@@ -312,7 +312,7 @@ export const mockTasks: Task[] = withSortOrders([
             start_date: '2026-05-12', end_date: '2026-05-12',
             actual_start_date: null, actual_end_date: null,
             estimated_hours: 3, quarter_id: 'q1', parent_task_id: 't1-4',
-            project_id: 'p1', wbs_no: '1.4.6', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+            project_id: 'p1', wbs_no: '1.4.6', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, dates_manual: false,
             assignees: [{ id: 'u3', name: '田中' }],
           },
           {
@@ -322,7 +322,7 @@ export const mockTasks: Task[] = withSortOrders([
             start_date: '2026-05-12', end_date: '2026-05-12',
             actual_start_date: null, actual_end_date: null,
             estimated_hours: 3, quarter_id: 'q1', parent_task_id: 't1-4',
-            project_id: 'p1', wbs_no: '1.4.7', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+            project_id: 'p1', wbs_no: '1.4.7', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, dates_manual: false,
             assignees: [{ id: 'u2', name: '佐藤' }],
           },
         ],
@@ -340,7 +340,7 @@ export const mockTasks: Task[] = withSortOrders([
     start_date: '2026-04-01', end_date: '2026-06-09',
     actual_start_date: '2026-04-01', actual_end_date: null,
     estimated_hours: null, quarter_id: 'q1', parent_task_id: null,
-    project_id: 'p1', wbs_no: '2', task_type: 'item', depth: 0, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+    project_id: 'p1', wbs_no: '2', task_type: 'item', depth: 0, task_kind: null, tm_reviewer: null, dates_manual: false,
     assignees: [{ id: 'u3', name: '田中' }],
     children: [
       // 2.1 解約後アンケートの追加
@@ -351,7 +351,7 @@ export const mockTasks: Task[] = withSortOrders([
         start_date: '2026-04-01', end_date: '2026-05-07',
         actual_start_date: '2026-04-01', actual_end_date: null,
         estimated_hours: null, quarter_id: 'q1', parent_task_id: 't2',
-        project_id: 'p1', wbs_no: '2.1', task_type: 'item', depth: 1, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+        project_id: 'p1', wbs_no: '2.1', task_type: 'item', depth: 1, task_kind: null, tm_reviewer: null, dates_manual: false,
         assignees: [{ id: 'u3', name: '田中' }],
         children: [
           {
@@ -361,7 +361,7 @@ export const mockTasks: Task[] = withSortOrders([
             start_date: '2026-04-01', end_date: '2026-04-02',
             actual_start_date: '2026-04-01', actual_end_date: '2026-04-02',
             estimated_hours: 6, quarter_id: 'q1', parent_task_id: 't2-1',
-            project_id: 'p1', wbs_no: '2.1.1', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+            project_id: 'p1', wbs_no: '2.1.1', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, dates_manual: false,
             assignees: [{ id: 'u3', name: '田中' }],
           },
           {
@@ -371,7 +371,7 @@ export const mockTasks: Task[] = withSortOrders([
             start_date: '2026-04-02', end_date: '2026-04-02',
             actual_start_date: '2026-04-02', actual_end_date: '2026-04-02',
             estimated_hours: 1, quarter_id: 'q1', parent_task_id: 't2-1',
-            project_id: 'p1', wbs_no: '2.1.2', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+            project_id: 'p1', wbs_no: '2.1.2', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, dates_manual: false,
             assignees: [{ id: 'u3', name: '田中' }],
           },
           {
@@ -381,7 +381,7 @@ export const mockTasks: Task[] = withSortOrders([
             start_date: '2026-04-15', end_date: '2026-04-15',
             actual_start_date: '2026-04-14', actual_end_date: '2026-04-14',
             estimated_hours: 3, quarter_id: 'q1', parent_task_id: 't2-1',
-            project_id: 'p1', wbs_no: '2.1.3', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+            project_id: 'p1', wbs_no: '2.1.3', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, dates_manual: false,
             assignees: [{ id: 'u3', name: '田中' }],
           },
           {
@@ -391,7 +391,7 @@ export const mockTasks: Task[] = withSortOrders([
             start_date: '2026-04-16', end_date: '2026-04-16',
             actual_start_date: '2026-04-14', actual_end_date: '2026-04-15',
             estimated_hours: 4, quarter_id: 'q1', parent_task_id: 't2-1',
-            project_id: 'p1', wbs_no: '2.1.4', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+            project_id: 'p1', wbs_no: '2.1.4', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, dates_manual: false,
             assignees: [{ id: 'u3', name: '田中' }],
           },
           {
@@ -401,7 +401,7 @@ export const mockTasks: Task[] = withSortOrders([
             start_date: '2026-04-16', end_date: '2026-04-21',
             actual_start_date: '2026-04-15', actual_end_date: '2026-04-16',
             estimated_hours: 4, quarter_id: 'q1', parent_task_id: 't2-1',
-            project_id: 'p1', wbs_no: '2.1.5', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+            project_id: 'p1', wbs_no: '2.1.5', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, dates_manual: false,
             assignees: [{ id: 'u3', name: '田中' }],
           },
           {
@@ -411,7 +411,7 @@ export const mockTasks: Task[] = withSortOrders([
             start_date: '2026-04-21', end_date: '2026-04-22',
             actual_start_date: '2026-04-21', actual_end_date: '2026-04-22',
             estimated_hours: 4, quarter_id: 'q1', parent_task_id: 't2-1',
-            project_id: 'p1', wbs_no: '2.1.6', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+            project_id: 'p1', wbs_no: '2.1.6', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, dates_manual: false,
             assignees: [{ id: 'u3', name: '田中' }],
           },
           {
@@ -421,7 +421,7 @@ export const mockTasks: Task[] = withSortOrders([
             start_date: '2026-04-22', end_date: '2026-04-22',
             actual_start_date: '2026-04-22', actual_end_date: '2026-04-22',
             estimated_hours: 3, quarter_id: 'q1', parent_task_id: 't2-1',
-            project_id: 'p1', wbs_no: '2.1.7', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+            project_id: 'p1', wbs_no: '2.1.7', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, dates_manual: false,
             assignees: [{ id: 'u3', name: '田中' }],
           },
           {
@@ -431,7 +431,7 @@ export const mockTasks: Task[] = withSortOrders([
             start_date: '2026-04-28', end_date: '2026-04-28',
             actual_start_date: null, actual_end_date: null,
             estimated_hours: 0.5, quarter_id: 'q1', parent_task_id: 't2-1',
-            project_id: 'p1', wbs_no: '2.1.8', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+            project_id: 'p1', wbs_no: '2.1.8', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, dates_manual: false,
             assignees: [{ id: 'u2', name: '佐藤' }],
           },
           {
@@ -441,7 +441,7 @@ export const mockTasks: Task[] = withSortOrders([
             start_date: '2026-04-30', end_date: '2026-04-30',
             actual_start_date: null, actual_end_date: null,
             estimated_hours: 2.25, quarter_id: 'q1', parent_task_id: 't2-1',
-            project_id: 'p1', wbs_no: '2.1.9', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+            project_id: 'p1', wbs_no: '2.1.9', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, dates_manual: false,
             assignees: [{ id: 'u3', name: '田中' }],
           },
           {
@@ -451,7 +451,7 @@ export const mockTasks: Task[] = withSortOrders([
             start_date: '2026-04-28', end_date: '2026-05-07',
             actual_start_date: null, actual_end_date: null,
             estimated_hours: 0.5, quarter_id: 'q1', parent_task_id: 't2-1',
-            project_id: 'p1', wbs_no: '2.1.10', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+            project_id: 'p1', wbs_no: '2.1.10', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, dates_manual: false,
             assignees: [{ id: 'u3', name: '田中' }],
           },
         ],
@@ -464,7 +464,7 @@ export const mockTasks: Task[] = withSortOrders([
         start_date: '2026-04-23', end_date: '2026-05-28',
         actual_start_date: '2026-04-23', actual_end_date: null,
         estimated_hours: null, quarter_id: 'q1', parent_task_id: 't2',
-        project_id: 'p1', wbs_no: '2.2', task_type: 'item', depth: 1, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+        project_id: 'p1', wbs_no: '2.2', task_type: 'item', depth: 1, task_kind: null, tm_reviewer: null, dates_manual: false,
         assignees: [{ id: 'u3', name: '田中' }],
         children: [
           {
@@ -474,7 +474,7 @@ export const mockTasks: Task[] = withSortOrders([
             start_date: '2026-04-23', end_date: '2026-04-23',
             actual_start_date: '2026-04-23', actual_end_date: '2026-04-23',
             estimated_hours: 6, quarter_id: 'q1', parent_task_id: 't2-2',
-            project_id: 'p1', wbs_no: '2.2.1', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+            project_id: 'p1', wbs_no: '2.2.1', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, dates_manual: false,
             assignees: [{ id: 'u3', name: '田中' }],
           },
           {
@@ -484,7 +484,7 @@ export const mockTasks: Task[] = withSortOrders([
             start_date: '2026-04-28', end_date: '2026-04-28',
             actual_start_date: null, actual_end_date: null,
             estimated_hours: 1, quarter_id: 'q1', parent_task_id: 't2-2',
-            project_id: 'p1', wbs_no: '2.2.2', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+            project_id: 'p1', wbs_no: '2.2.2', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, dates_manual: false,
             assignees: [{ id: 'u3', name: '田中' }],
           },
           {
@@ -494,7 +494,7 @@ export const mockTasks: Task[] = withSortOrders([
             start_date: '2026-04-28', end_date: '2026-04-28',
             actual_start_date: null, actual_end_date: null,
             estimated_hours: 4, quarter_id: 'q1', parent_task_id: 't2-2',
-            project_id: 'p1', wbs_no: '2.2.3', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+            project_id: 'p1', wbs_no: '2.2.3', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, dates_manual: false,
             assignees: [{ id: 'u3', name: '田中' }],
           },
           {
@@ -504,7 +504,7 @@ export const mockTasks: Task[] = withSortOrders([
             start_date: '2026-04-30', end_date: '2026-04-30',
             actual_start_date: null, actual_end_date: null,
             estimated_hours: 4, quarter_id: 'q1', parent_task_id: 't2-2',
-            project_id: 'p1', wbs_no: '2.2.4', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+            project_id: 'p1', wbs_no: '2.2.4', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, dates_manual: false,
             assignees: [{ id: 'u3', name: '田中' }],
           },
           {
@@ -514,7 +514,7 @@ export const mockTasks: Task[] = withSortOrders([
             start_date: '2026-05-14', end_date: '2026-05-21',
             actual_start_date: null, actual_end_date: null,
             estimated_hours: 12, quarter_id: 'q1', parent_task_id: 't2-2',
-            project_id: 'p1', wbs_no: '2.2.5', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+            project_id: 'p1', wbs_no: '2.2.5', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, dates_manual: false,
             assignees: [{ id: 'u3', name: '田中' }],
           },
           {
@@ -524,7 +524,7 @@ export const mockTasks: Task[] = withSortOrders([
             start_date: '2026-05-27', end_date: '2026-05-28',
             actual_start_date: null, actual_end_date: null,
             estimated_hours: 2, quarter_id: 'q1', parent_task_id: 't2-2',
-            project_id: 'p1', wbs_no: '2.2.6', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+            project_id: 'p1', wbs_no: '2.2.6', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, dates_manual: false,
             assignees: [{ id: 'u3', name: '田中' }],
           },
         ],
@@ -537,7 +537,7 @@ export const mockTasks: Task[] = withSortOrders([
         start_date: '2026-05-27', end_date: '2026-06-09',
         actual_start_date: null, actual_end_date: null,
         estimated_hours: null, quarter_id: 'q1', parent_task_id: 't2',
-        project_id: 'p1', wbs_no: '2.3', task_type: 'item', depth: 1, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+        project_id: 'p1', wbs_no: '2.3', task_type: 'item', depth: 1, task_kind: null, tm_reviewer: null, dates_manual: false,
         assignees: [{ id: 'u3', name: '田中' }],
         children: [
           {
@@ -547,7 +547,7 @@ export const mockTasks: Task[] = withSortOrders([
             start_date: '2026-05-27', end_date: '2026-06-02',
             actual_start_date: null, actual_end_date: null,
             estimated_hours: 4, quarter_id: 'q1', parent_task_id: 't2-3',
-            project_id: 'p1', wbs_no: '2.3.1', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+            project_id: 'p1', wbs_no: '2.3.1', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, dates_manual: false,
             assignees: [{ id: 'u3', name: '田中' }],
           },
           {
@@ -557,7 +557,7 @@ export const mockTasks: Task[] = withSortOrders([
             start_date: '2026-06-03', end_date: '2026-06-09',
             actual_start_date: null, actual_end_date: null,
             estimated_hours: 9, quarter_id: 'q1', parent_task_id: 't2-3',
-            project_id: 'p1', wbs_no: '2.3.2', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+            project_id: 'p1', wbs_no: '2.3.2', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, dates_manual: false,
             assignees: [{ id: 'u3', name: '田中' }],
           },
         ],
@@ -575,7 +575,7 @@ export const mockTasks: Task[] = withSortOrders([
     start_date: '2026-04-02', end_date: '2026-06-17',
     actual_start_date: '2026-04-02', actual_end_date: null,
     estimated_hours: null, quarter_id: 'q1', parent_task_id: null,
-    project_id: 'p1', wbs_no: '3', task_type: 'item', depth: 0, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+    project_id: 'p1', wbs_no: '3', task_type: 'item', depth: 0, task_kind: null, tm_reviewer: null, dates_manual: false,
     assignees: [{ id: 'u2', name: '佐藤' }, { id: 'u3', name: '田中' }],
     children: [
       // 3.1 月次報告
@@ -586,7 +586,7 @@ export const mockTasks: Task[] = withSortOrders([
         start_date: '2026-04-02', end_date: '2026-06-02',
         actual_start_date: '2026-04-02', actual_end_date: null,
         estimated_hours: null, quarter_id: 'q1', parent_task_id: 't3',
-        project_id: 'p1', wbs_no: '3.1', task_type: 'item', depth: 1, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+        project_id: 'p1', wbs_no: '3.1', task_type: 'item', depth: 1, task_kind: null, tm_reviewer: null, dates_manual: false,
         assignees: [{ id: 'u2', name: '佐藤' }],
         children: [
           {
@@ -596,7 +596,7 @@ export const mockTasks: Task[] = withSortOrders([
             start_date: '2026-04-02', end_date: '2026-04-02',
             actual_start_date: '2026-04-02', actual_end_date: '2026-04-02',
             estimated_hours: 0.5, quarter_id: 'q1', parent_task_id: 't3-1',
-            project_id: 'p1', wbs_no: '3.1.1', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+            project_id: 'p1', wbs_no: '3.1.1', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, dates_manual: false,
             assignees: [{ id: 'u2', name: '佐藤' }],
           },
           {
@@ -606,7 +606,7 @@ export const mockTasks: Task[] = withSortOrders([
             start_date: '2026-05-07', end_date: '2026-05-07',
             actual_start_date: null, actual_end_date: null,
             estimated_hours: 0.5, quarter_id: 'q1', parent_task_id: 't3-1',
-            project_id: 'p1', wbs_no: '3.1.2', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+            project_id: 'p1', wbs_no: '3.1.2', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, dates_manual: false,
             assignees: [{ id: 'u2', name: '佐藤' }],
           },
           {
@@ -616,7 +616,7 @@ export const mockTasks: Task[] = withSortOrders([
             start_date: '2026-06-02', end_date: '2026-06-02',
             actual_start_date: null, actual_end_date: null,
             estimated_hours: 0.5, quarter_id: 'q1', parent_task_id: 't3-1',
-            project_id: 'p1', wbs_no: '3.1.3', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+            project_id: 'p1', wbs_no: '3.1.3', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, dates_manual: false,
             assignees: [{ id: 'u2', name: '佐藤' }],
           },
         ],
@@ -629,7 +629,7 @@ export const mockTasks: Task[] = withSortOrders([
         start_date: '2026-04-08', end_date: '2026-06-17',
         actual_start_date: '2026-04-08', actual_end_date: null,
         estimated_hours: null, quarter_id: 'q1', parent_task_id: 't3',
-        project_id: 'p1', wbs_no: '3.2', task_type: 'item', depth: 1, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+        project_id: 'p1', wbs_no: '3.2', task_type: 'item', depth: 1, task_kind: null, tm_reviewer: null, dates_manual: false,
         assignees: [{ id: 'u3', name: '田中' }],
         children: [
           {
@@ -639,7 +639,7 @@ export const mockTasks: Task[] = withSortOrders([
             start_date: '2026-04-08', end_date: '2026-04-08',
             actual_start_date: '2026-04-09', actual_end_date: '2026-04-09',
             estimated_hours: 0.5, quarter_id: 'q1', parent_task_id: 't3-2',
-            project_id: 'p1', wbs_no: '3.2.1', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+            project_id: 'p1', wbs_no: '3.2.1', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, dates_manual: false,
             assignees: [{ id: 'u3', name: '田中' }],
           },
           {
@@ -649,7 +649,7 @@ export const mockTasks: Task[] = withSortOrders([
             start_date: '2026-04-09', end_date: '2026-04-09',
             actual_start_date: '2026-04-09', actual_end_date: '2026-04-09',
             estimated_hours: 0.5, quarter_id: 'q1', parent_task_id: 't3-2',
-            project_id: 'p1', wbs_no: '3.2.2', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+            project_id: 'p1', wbs_no: '3.2.2', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, dates_manual: false,
             assignees: [{ id: 'u3', name: '田中' }],
           },
           {
@@ -659,7 +659,7 @@ export const mockTasks: Task[] = withSortOrders([
             start_date: '2026-04-14', end_date: '2026-04-14',
             actual_start_date: '2026-04-14', actual_end_date: '2026-04-14',
             estimated_hours: 3, quarter_id: 'q1', parent_task_id: 't3-2',
-            project_id: 'p1', wbs_no: '3.2.3', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+            project_id: 'p1', wbs_no: '3.2.3', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, dates_manual: false,
             assignees: [{ id: 'u3', name: '田中' }],
           },
           {
@@ -669,7 +669,7 @@ export const mockTasks: Task[] = withSortOrders([
             start_date: '2026-04-15', end_date: '2026-04-15',
             actual_start_date: '2026-04-15', actual_end_date: '2026-04-15',
             estimated_hours: 1, quarter_id: 'q1', parent_task_id: 't3-2',
-            project_id: 'p1', wbs_no: '3.2.4', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+            project_id: 'p1', wbs_no: '3.2.4', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, dates_manual: false,
             assignees: [{ id: 'u3', name: '田中' }],
           },
           {
@@ -679,7 +679,7 @@ export const mockTasks: Task[] = withSortOrders([
             start_date: '2026-05-07', end_date: '2026-05-07',
             actual_start_date: null, actual_end_date: null,
             estimated_hours: 0.5, quarter_id: 'q1', parent_task_id: 't3-2',
-            project_id: 'p1', wbs_no: '3.2.5', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+            project_id: 'p1', wbs_no: '3.2.5', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, dates_manual: false,
             assignees: [{ id: 'u3', name: '田中' }],
           },
           {
@@ -689,7 +689,7 @@ export const mockTasks: Task[] = withSortOrders([
             start_date: '2026-05-07', end_date: '2026-05-07',
             actual_start_date: null, actual_end_date: null,
             estimated_hours: 3, quarter_id: 'q1', parent_task_id: 't3-2',
-            project_id: 'p1', wbs_no: '3.2.6', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+            project_id: 'p1', wbs_no: '3.2.6', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, dates_manual: false,
             assignees: [{ id: 'u3', name: '田中' }],
           },
           {
@@ -699,7 +699,7 @@ export const mockTasks: Task[] = withSortOrders([
             start_date: '2026-05-13', end_date: '2026-05-13',
             actual_start_date: null, actual_end_date: null,
             estimated_hours: 1, quarter_id: 'q1', parent_task_id: 't3-2',
-            project_id: 'p1', wbs_no: '3.2.7', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+            project_id: 'p1', wbs_no: '3.2.7', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, dates_manual: false,
             assignees: [{ id: 'u3', name: '田中' }],
           },
           {
@@ -709,7 +709,7 @@ export const mockTasks: Task[] = withSortOrders([
             start_date: '2026-06-10', end_date: '2026-06-10',
             actual_start_date: null, actual_end_date: null,
             estimated_hours: 0.5, quarter_id: 'q1', parent_task_id: 't3-2',
-            project_id: 'p1', wbs_no: '3.2.8', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+            project_id: 'p1', wbs_no: '3.2.8', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, dates_manual: false,
             assignees: [{ id: 'u3', name: '田中' }],
           },
           {
@@ -719,7 +719,7 @@ export const mockTasks: Task[] = withSortOrders([
             start_date: '2026-06-11', end_date: '2026-06-11',
             actual_start_date: null, actual_end_date: null,
             estimated_hours: 3, quarter_id: 'q1', parent_task_id: 't3-2',
-            project_id: 'p1', wbs_no: '3.2.9', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+            project_id: 'p1', wbs_no: '3.2.9', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, dates_manual: false,
             assignees: [{ id: 'u3', name: '田中' }],
           },
           {
@@ -729,7 +729,7 @@ export const mockTasks: Task[] = withSortOrders([
             start_date: '2026-06-17', end_date: '2026-06-17',
             actual_start_date: null, actual_end_date: null,
             estimated_hours: 1, quarter_id: 'q1', parent_task_id: 't3-2',
-            project_id: 'p1', wbs_no: '3.2.10', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+            project_id: 'p1', wbs_no: '3.2.10', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, dates_manual: false,
             assignees: [{ id: 'u3', name: '田中' }],
           },
         ],
@@ -747,7 +747,7 @@ export const mockTasks: Task[] = withSortOrders([
     start_date: '2026-03-25', end_date: '2026-06-24',
     actual_start_date: '2026-03-25', actual_end_date: null,
     estimated_hours: null, quarter_id: 'q1', parent_task_id: null,
-    project_id: 'p1', wbs_no: '4', task_type: 'item', depth: 0, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+    project_id: 'p1', wbs_no: '4', task_type: 'item', depth: 0, task_kind: null, tm_reviewer: null, dates_manual: false,
     assignees: [{ id: 'u2', name: '佐藤' }],
     children: [
       // 4.1 前Qのタスク 稼働時間精算
@@ -758,7 +758,7 @@ export const mockTasks: Task[] = withSortOrders([
         start_date: '2026-03-25', end_date: '2026-04-15',
         actual_start_date: '2026-03-25', actual_end_date: '2026-04-15',
         estimated_hours: null, quarter_id: 'q1', parent_task_id: 't4',
-        project_id: 'p1', wbs_no: '4.1', task_type: 'item', depth: 1, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+        project_id: 'p1', wbs_no: '4.1', task_type: 'item', depth: 1, task_kind: null, tm_reviewer: null, dates_manual: false,
         assignees: [{ id: 'u2', name: '佐藤' }],
         children: [
           {
@@ -768,7 +768,7 @@ export const mockTasks: Task[] = withSortOrders([
             start_date: '2026-03-25', end_date: '2026-03-25',
             actual_start_date: '2026-03-25', actual_end_date: '2026-03-25',
             estimated_hours: 1, quarter_id: 'q1', parent_task_id: 't4-1',
-            project_id: 'p1', wbs_no: '4.1.1', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+            project_id: 'p1', wbs_no: '4.1.1', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, dates_manual: false,
             assignees: [{ id: 'u2', name: '佐藤' }],
           },
           {
@@ -778,7 +778,7 @@ export const mockTasks: Task[] = withSortOrders([
             start_date: '2026-03-25', end_date: '2026-03-26',
             actual_start_date: '2026-03-25', actual_end_date: '2026-04-01',
             estimated_hours: 4, quarter_id: 'q1', parent_task_id: 't4-1',
-            project_id: 'p1', wbs_no: '4.1.2', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+            project_id: 'p1', wbs_no: '4.1.2', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, dates_manual: false,
             assignees: [{ id: 'u2', name: '佐藤' }],
           },
           {
@@ -788,7 +788,7 @@ export const mockTasks: Task[] = withSortOrders([
             start_date: '2026-03-26', end_date: '2026-03-26',
             actual_start_date: '2026-03-26', actual_end_date: '2026-04-01',
             estimated_hours: 2, quarter_id: 'q1', parent_task_id: 't4-1',
-            project_id: 'p1', wbs_no: '4.1.3', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+            project_id: 'p1', wbs_no: '4.1.3', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, dates_manual: false,
             assignees: [{ id: 'u2', name: '佐藤' }],
           },
           {
@@ -798,7 +798,7 @@ export const mockTasks: Task[] = withSortOrders([
             start_date: '2026-03-26', end_date: '2026-03-26',
             actual_start_date: '2026-04-02', actual_end_date: '2026-04-07',
             estimated_hours: 1, quarter_id: 'q1', parent_task_id: 't4-1',
-            project_id: 'p1', wbs_no: '4.1.4', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+            project_id: 'p1', wbs_no: '4.1.4', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, dates_manual: false,
             assignees: [{ id: 'u2', name: '佐藤' }],
           },
           {
@@ -808,7 +808,7 @@ export const mockTasks: Task[] = withSortOrders([
             start_date: '2026-04-07', end_date: '2026-04-15',
             actual_start_date: '2026-04-07', actual_end_date: '2026-04-15',
             estimated_hours: 0.5, quarter_id: 'q1', parent_task_id: 't4-1',
-            project_id: 'p1', wbs_no: '4.1.5', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+            project_id: 'p1', wbs_no: '4.1.5', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, dates_manual: false,
             assignees: [{ id: 'u2', name: '佐藤' }],
           },
         ],
@@ -821,7 +821,7 @@ export const mockTasks: Task[] = withSortOrders([
         start_date: '2026-06-16', end_date: '2026-06-24',
         actual_start_date: null, actual_end_date: null,
         estimated_hours: null, quarter_id: 'q1', parent_task_id: 't4',
-        project_id: 'p1', wbs_no: '4.2', task_type: 'item', depth: 1, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+        project_id: 'p1', wbs_no: '4.2', task_type: 'item', depth: 1, task_kind: null, tm_reviewer: null, dates_manual: false,
         assignees: [{ id: 'u2', name: '佐藤' }, { id: 'u3', name: '田中' }],
         children: [
           {
@@ -831,7 +831,7 @@ export const mockTasks: Task[] = withSortOrders([
             start_date: '2026-06-16', end_date: '2026-06-18',
             actual_start_date: null, actual_end_date: null,
             estimated_hours: 9.5, quarter_id: 'q1', parent_task_id: 't4-2',
-            project_id: 'p1', wbs_no: '4.2.1', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+            project_id: 'p1', wbs_no: '4.2.1', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, dates_manual: false,
             assignees: [{ id: 'u2', name: '佐藤' }],
           },
           {
@@ -841,7 +841,7 @@ export const mockTasks: Task[] = withSortOrders([
             start_date: '2026-06-16', end_date: '2026-06-18',
             actual_start_date: null, actual_end_date: null,
             estimated_hours: 9.5, quarter_id: 'q1', parent_task_id: 't4-2',
-            project_id: 'p1', wbs_no: '4.2.2', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+            project_id: 'p1', wbs_no: '4.2.2', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, dates_manual: false,
             assignees: [{ id: 'u3', name: '田中' }],
           },
           {
@@ -851,7 +851,7 @@ export const mockTasks: Task[] = withSortOrders([
             start_date: '2026-06-23', end_date: '2026-06-24',
             actual_start_date: null, actual_end_date: null,
             estimated_hours: 7, quarter_id: 'q1', parent_task_id: 't4-2',
-            project_id: 'p1', wbs_no: '4.2.3', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, pj_reviewer: null,
+            project_id: 'p1', wbs_no: '4.2.3', task_type: 'task', depth: 2, task_kind: null, tm_reviewer: null, dates_manual: false,
             assignees: [{ id: 'u2', name: '佐藤' }],
           },
         ],
@@ -883,13 +883,6 @@ export const mockReviewHistory: ReviewHistory[] = [
     id: 'rh1', review_id: 'r1', action: 'request_review',
     user_id: 'u3', user_name: '田中', created_at: '2026-04-22T14:00:00',
   },
-]
-
-/** MOCKロードマップアイテム */
-export const mockRoadmapItems: RoadmapItem[] = [
-  { id: 'ri1', title: '解約後アンケート リリース', description: '解約後アンケート機能の本番リリース', quarter_id: 'q1', quarter_title: '2026年4月〜6月', status: '進行中', project_id: 'p1' },
-  { id: 'ri2', title: '契約計算式修正 リリース', description: '端数処理バグ修正の本番リリース', quarter_id: 'q1', quarter_title: '2026年4月〜6月', status: '計画中', project_id: 'p1' },
-  { id: 'ri3', title: '文字サイズ自動調整 リリース', description: 'PDF出力文字サイズ自動調整機能のリリース', quarter_id: 'q1', quarter_title: '2026年4月〜6月', status: '計画中', project_id: 'p1' },
 ]
 
 /** MOCKテンプレート一覧 */

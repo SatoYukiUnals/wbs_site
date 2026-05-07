@@ -19,6 +19,8 @@ from .views import (
     RecentTasksView,
     ReportGenerateView,
     ReportPdfView,
+    UserPtoListView,
+    WorkingHourSettingView,
 )
 
 urlpatterns = [
@@ -56,6 +58,20 @@ urlpatterns = [
     # 進捗・直近タスク
     path('projects/<uuid:project_id>/progress/', ProgressView.as_view(), name='project-progress'),
     path('projects/<uuid:project_id>/recent/', RecentTasksView.as_view(), name='project-recent'),
+
+    # 稼働時間設定
+    path(
+        'projects/<uuid:project_id>/working-hour-setting/',
+        WorkingHourSettingView.as_view(),
+        name='working-hour-setting',
+    ),
+
+    # 有休
+    path(
+        'projects/<uuid:project_id>/user-ptos/',
+        UserPtoListView.as_view(),
+        name='user-ptos',
+    ),
 
     # 自動割り振り
     path(

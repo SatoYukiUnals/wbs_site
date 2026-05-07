@@ -46,23 +46,41 @@ class TaskListCreateView(generics.ListCreateAPIView):
         ルートタスク（parent_task=None）のみ返す。
         TaskSerializer で children を再帰的にシリアライズする。
         クエリパラメータ: status / assignee（user_id）/ quarter（quarter_id）
+
+        フィルタは「配下のいずれかが条件にマッチするルート」を返す。
+        項目（item）は status/assignee/quarter を持たないため、自分自身では
+        マッチしない仕様だが、配下のリーフが該当すればそのルートを返す。
         """
         project_id = self.kwargs['project_id']
-        qs = Task.objects.filter(
+        base = Task.objects.filter(
             project__id=project_id,
             project__tenant=self.request.user.tenant,
-            parent_task__isnull=True,
             deleted_at__isnull=True,
         )
         status_param = self.request.query_params.get('status')
-        if status_param:
-            qs = qs.filter(status=status_param)
         assignee_param = self.request.query_params.get('assignee')
-        if assignee_param:
-            qs = qs.filter(assignees__user__id=assignee_param)
         quarter_param = self.request.query_params.get('quarter')
-        if quarter_param:
-            qs = qs.filter(quarter__id=quarter_param)
+
+        if status_param or assignee_param or quarter_param:
+            match_qs = base
+            if status_param:
+                match_qs = match_qs.filter(status=status_param)
+            if assignee_param:
+                match_qs = match_qs.filter(assignees__user__id=assignee_param)
+            if quarter_param:
+                match_qs = match_qs.filter(quarter__id=quarter_param)
+            # マッチしたタスクが属するルートの wbs_no（先頭セグメント）を抽出
+            root_wbs_nos = set()
+            for w in match_qs.values_list('wbs_no', flat=True):
+                if w:
+                    root_wbs_nos.add(w.split('.', 1)[0])
+            qs = base.filter(
+                parent_task__isnull=True,
+                wbs_no__in=root_wbs_nos,
+            )
+        else:
+            qs = base.filter(parent_task__isnull=True)
+
         return qs.order_by('order', 'created_at')
 
     def create(self, request, *args, **kwargs):
@@ -78,10 +96,10 @@ class TaskListCreateView(generics.ListCreateAPIView):
         # depth を親タスクから計算する
         parent_task = data.get('parent_task')
         if parent_task is not None:
-            # 深さ制限: 最大4階層（depth 0/1/2/3）
-            if parent_task.depth >= 3:
+            # 深さ制限: 最大5階層（depth 0/1/2/3/4）
+            if parent_task.depth >= 4:
                 return Response(
-                    {'detail': 'タスクの深さは最大4階層（depth 0/1/2/3）までです。'},
+                    {'detail': 'タスクの深さは最大5階層（depth 0/1/2/3/4）までです。'},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
             depth = parent_task.depth + 1
@@ -126,7 +144,7 @@ class TaskBulkCreateView(APIView):
             parent_task = data.get('parent_task')
             depth = (parent_task.depth + 1) if parent_task else 0
 
-            if parent_task and parent_task.depth >= 3:
+            if parent_task and parent_task.depth >= 4:
                 continue  # 深さ超過は無視する
 
             # 親ごとに既存最大 order+1 をベースに order を割り当てる
@@ -199,17 +217,38 @@ class TaskDetailView(generics.RetrieveUpdateDestroyAPIView):
         return Response(TaskSerializer(task).data)
 
     def destroy(self, request, *args, **kwargs):
-        """論理削除（deleted_at を設定する）"""
+        """論理削除（deleted_at を設定する）
+
+        クエリパラメータ ?mode=
+          - cascade（既定）: 配下も含めて全て削除する
+          - promote        : 配下のタスクを 1階層上げてから自身のみ削除する
+        """
         task = self.get_object()
-        task.deleted_at = timezone.now()
-        task.save(update_fields=['deleted_at'])
+        mode = request.query_params.get('mode', 'cascade')
 
-        # 子タスクも再帰的に論理削除する
-        _soft_delete_children(task)
+        if mode == 'promote':
+            new_parent = task.parent_task
+            new_parent_depth = new_parent.depth if new_parent is not None else -1
+            children = list(
+                Task.objects.filter(
+                    parent_task=task, deleted_at__isnull=True,
+                ).order_by('order', 'created_at')
+            )
+            for child in children:
+                child.parent_task = new_parent
+                child.depth = new_parent_depth + 1
+                child.save(update_fields=['parent_task', 'depth'])
+                # 配下の depth も連鎖的に -1 する
+                _shift_depth_recursively(child, delta=-1)
 
-        # wbs_no を再採番する
+            task.deleted_at = timezone.now()
+            task.save(update_fields=['deleted_at'])
+        else:
+            task.deleted_at = timezone.now()
+            task.save(update_fields=['deleted_at'])
+            _soft_delete_children(task)
+
         regenerate_wbs_nos(task.project)
-
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -221,6 +260,17 @@ def _soft_delete_children(task):
         child.deleted_at = now
         child.save(update_fields=['deleted_at'])
         _soft_delete_children(child)
+
+
+def _shift_depth_recursively(task, delta):
+    """task の配下（孫以降）の depth を delta 分シフトする"""
+    children = Task.objects.filter(
+        parent_task=task, deleted_at__isnull=True,
+    )
+    for child in children:
+        child.depth += delta
+        child.save(update_fields=['depth'])
+        _shift_depth_recursively(child, delta)
 
 
 class TaskOrderView(APIView):
@@ -249,9 +299,17 @@ class TaskOrderView(APIView):
             if new_parent_id:
                 try:
                     new_parent = Task.objects.get(id=new_parent_id, project=task.project)
-                    if new_parent.depth >= 3:
+                    if new_parent.depth >= 4:
                         return Response(
-                            {'detail': 'タスクの深さは最大4階層（depth 0/1/2/3）までです。'},
+                            {'detail': 'タスクの深さは最大5階層（depth 0/1/2/3/4）までです。'},
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+                    if new_parent.task_type == 'task':
+                        return Response(
+                            {'detail': (
+                                'タスク（task）の下に子を作成できません。'
+                                '先に親項目（item）に変換してください。'
+                            )},
                             status=status.HTTP_400_BAD_REQUEST,
                         )
                     task.parent_task = new_parent

@@ -3,6 +3,7 @@ import axios from 'axios'
 import type {
   User, Project, Quarter, Task, Review, ReviewComment, ReviewHistory,
   Template, AutoAssignPreview, ProjectMember, UserRole,
+  WorkingHourSetting, UserPto,
 } from '@/types'
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api/v1'
@@ -64,6 +65,8 @@ export const adaptProject = (p: ApiProject): Project => ({
   description: p.description ?? '',
   progress: p.progress ?? 0,
   tenant_id: p.tenant,
+  pj_reviewer_id: p.pj_reviewer ?? null,
+  pj_reviewer_name: p.pj_reviewer_name ?? null,
 })
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -104,8 +107,10 @@ export const adaptTask = (t: ApiTask): Task => ({
     name: (a.user_info?.username ?? '') as string,
   })),
   task_kind: t.task_kind ?? null,
-  tm_reviewer: null,
-  pj_reviewer: null,
+  dates_manual: t.dates_manual ?? false,
+  tm_reviewer: t.tm_reviewer
+    ? { id: t.tm_reviewer, name: t.tm_reviewer_name ?? '' }
+    : null,
   children: (t.children ?? []).map(adaptTask),
   depth: t.depth ?? 0,
 })
@@ -182,14 +187,112 @@ export const api = {
       await http.patch(`/auth/users/${userId}/role/`, { role })
     },
 
+    /** ユーザー直接登録（master のみ） */
+    createUser: async (payload: {
+      username: string
+      email: string
+      password: string
+      role: UserRole
+    }): Promise<User> => {
+      const { data } = await http.post('/auth/users/create/', payload)
+      return adaptUser(data)
+    },
+
+    /** ユーザー情報更新（master のみ・表示名・メール・ロール・パスワード） */
+    updateUser: async (
+      userId: string,
+      payload: {
+        username?: string
+        email?: string
+        role?: UserRole
+        password?: string
+      },
+    ): Promise<User> => {
+      // password が空なら送信しない
+      const body: Record<string, unknown> = { ...payload }
+      if (!body.password) delete body.password
+      const { data } = await http.patch(`/auth/users/${userId}/`, body)
+      return adaptUser(data)
+    },
+
     /** ユーザー削除 */
     deleteUser: async (userId: string): Promise<void> => {
       await http.delete(`/auth/users/${userId}/`)
     },
 
     /** ユーザー招待 */
-    invite: async (email: string, role: UserRole): Promise<void> => {
-      await http.post('/auth/users/invite/', { email, role })
+    invite: async (email: string, role: UserRole): Promise<{
+      email: string; role: UserRole; token: string; expires_at: string
+    }> => {
+      const { data } = await http.post('/auth/users/invite/', { email, role })
+      return data
+    },
+
+    /** テナント新規登録（認証不要・初期 master ユーザーも作成） */
+    registerTenant: async (payload: {
+      tenant_name: string
+      email: string
+      username: string
+      password: string
+    }): Promise<{ user: User; access: string; refresh: string }> => {
+      const { data } = await http.post('/auth/register/tenant/', payload)
+      return {
+        user: adaptUser(data.user),
+        access: data.access,
+        refresh: data.refresh,
+      }
+    },
+
+    /** テナント情報を取得 */
+    getTenant: async (): Promise<{
+      id: string
+      name: string
+      holiday_weekdays: number[]
+    }> => {
+      const { data } = await http.get('/auth/tenant/')
+      return {
+        id: data.id,
+        name: data.name,
+        holiday_weekdays: data.holiday_weekdays ?? [],
+      }
+    },
+
+    /** テナント情報を更新（master のみ） */
+    updateTenant: async (
+      payload: { name?: string; holiday_weekdays?: number[] },
+    ): Promise<{ id: string; name: string; holiday_weekdays: number[] }> => {
+      const { data } = await http.patch('/auth/tenant/', payload)
+      return {
+        id: data.id,
+        name: data.name,
+        holiday_weekdays: data.holiday_weekdays ?? [],
+      }
+    },
+
+    /** 会社休日（テナント休日）一覧 */
+    listTenantHolidays: async (): Promise<
+      { id: string; date: string; name: string }[]
+    > => {
+      const { data } = await http.get('/auth/tenant/holidays/')
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (data as any[]).map(d => ({
+        id: d.id, date: d.date, name: d.name ?? '',
+      }))
+    },
+
+    /** 会社休日を追加 */
+    addTenantHoliday: async (
+      date: string, name = '',
+    ): Promise<{ id: string; date: string; name: string }> => {
+      const { data } = await http.post(
+        '/auth/tenant/holidays/', { date, name },
+      )
+      return { id: data.id, date: data.date, name: data.name ?? '' }
+    },
+
+    /** 会社休日を削除 */
+    removeTenantHoliday: async (date: string): Promise<void> => {
+      await http.delete(`/auth/tenant/holidays/?date=${date}`)
     },
   },
 
@@ -212,8 +315,11 @@ export const api = {
       return adaptProject(data)
     },
 
-    /** プロジェクト更新 */
-    update: async (projectId: string, payload: { name?: string; description?: string }): Promise<Project> => {
+    /** プロジェクト更新（name / description / pj_reviewer など） */
+    update: async (
+      projectId: string,
+      payload: Record<string, unknown>,
+    ): Promise<Project> => {
       const { data } = await http.patch(`/projects/${projectId}/`, payload)
       return adaptProject(data)
     },
@@ -296,6 +402,8 @@ export const api = {
         parent_task?: string | null
         quarter?: string | null
         task_type?: string
+        status?: string
+        progress?: number
       }>,
     ): Promise<Task[]> => {
       const payload = items.map(it => {
@@ -303,6 +411,8 @@ export const api = {
         if (it.quarter) o.quarter = it.quarter
         if (it.parent_task) o.parent_task = it.parent_task
         if (it.task_type) o.task_type = it.task_type
+        if (it.status) o.status = it.status
+        if (it.progress !== undefined) o.progress = it.progress
         return o
       })
       const { data } = await http.post(`/projects/${projectId}/tasks/bulk/`, payload)
@@ -310,8 +420,19 @@ export const api = {
     },
 
     /** タスク削除 */
-    delete: async (projectId: string, taskId: string): Promise<void> => {
-      await http.delete(`/projects/${projectId}/tasks/${taskId}/`)
+    /**
+     * タスク削除。
+     * mode='cascade': 配下も含めて全て削除（既定）
+     * mode='promote': 配下のタスクを 1階層上げてから自身のみ削除
+     */
+    delete: async (
+      projectId: string,
+      taskId: string,
+      mode: 'cascade' | 'promote' = 'cascade',
+    ): Promise<void> => {
+      await http.delete(
+        `/projects/${projectId}/tasks/${taskId}/?mode=${mode}`,
+      )
     },
 
     /** 担当者を追加する */
@@ -464,20 +585,87 @@ export const api = {
   },
 
   autoAssign: {
-    /** 自動割り振りプレビュー */
-    preview: async (projectId: string): Promise<AutoAssignPreview[]> => {
-      const { data } = await http.get(`/projects/${projectId}/auto-assign/preview/`)
-      return (data as ApiUser[]).map(r => ({
-        task_id: r.task_id,
-        task_title: r.task_title,
-        assignee_id: r.assignee_id,
-        assignee_name: r.assignee_name,
-      }))
+    /** 自動割り振りプレビュー（日付スケジューラ） */
+    preview: async (projectId: string): Promise<AutoAssignPreview> => {
+      const { data } = await http.get(
+        `/projects/${projectId}/auto-assign/preview/`,
+      )
+      return data as AutoAssignPreview
     },
 
     /** 自動割り振り確定 */
-    confirm: async (projectId: string): Promise<void> => {
-      await http.post(`/projects/${projectId}/auto-assign/confirm/`)
+    confirm: async (
+      projectId: string,
+    ): Promise<{ applied?: number; detail?: string; errors?: unknown[] }> => {
+      try {
+        const { data } = await http.post(
+          `/projects/${projectId}/auto-assign/confirm/`,
+        )
+        return data
+      } catch (err) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const e = err as any
+        if (e.response?.status === 400) return e.response.data
+        throw err
+      }
     },
   },
+
+  workingHour: {
+    /** 1日あたりの稼働時間設定を取得 */
+    get: async (projectId: string): Promise<WorkingHourSetting> => {
+      const { data } = await http.get(
+        `/projects/${projectId}/working-hour-setting/`,
+      )
+      return { daily_hours: parseFloat(data.daily_hours) }
+    },
+    /** 1日あたりの稼働時間設定を更新 */
+    update: async (
+      projectId: string, dailyHours: number,
+    ): Promise<WorkingHourSetting> => {
+      const { data } = await http.put(
+        `/projects/${projectId}/working-hour-setting/`,
+        { daily_hours: dailyHours },
+      )
+      return { daily_hours: parseFloat(data.daily_hours) }
+    },
+  },
+
+  pto: {
+    /** 有休一覧 */
+    list: async (projectId: string): Promise<UserPto[]> => {
+      const { data } = await http.get(`/projects/${projectId}/user-ptos/`)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (data as any[]).map(r => ({
+        id: r.id,
+        user_id: r.user,
+        user_name: r.user_name ?? '',
+        date: r.date,
+      }))
+    },
+    /** 有休追加 */
+    add: async (
+      projectId: string, userId: string, date: string,
+    ): Promise<UserPto> => {
+      const { data } = await http.post(
+        `/projects/${projectId}/user-ptos/`,
+        { user: userId, date },
+      )
+      return {
+        id: data.id,
+        user_id: data.user,
+        user_name: data.user_name ?? '',
+        date: data.date,
+      }
+    },
+    /** 有休削除 */
+    remove: async (
+      projectId: string, userId: string, date: string,
+    ): Promise<void> => {
+      await http.delete(
+        `/projects/${projectId}/user-ptos/?user=${userId}&date=${date}`,
+      )
+    },
+  },
+
 }

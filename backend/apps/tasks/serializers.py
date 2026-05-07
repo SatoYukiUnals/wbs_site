@@ -45,6 +45,9 @@ class TaskSerializer(serializers.ModelSerializer):
     # 子タスクを再帰的にシリアライズする
     children = RecursiveChildSerializer(many=True, read_only=True)
     assignees = TaskAssigneeSerializer(many=True, read_only=True)
+    tm_reviewer_name = serializers.CharField(
+        source='tm_reviewer.username', read_only=True, default=None,
+    )
 
     class Meta:
         model = Task
@@ -54,6 +57,7 @@ class TaskSerializer(serializers.ModelSerializer):
             'order', 'start_date', 'end_date', 'estimated_hours',
             'status', 'progress', 'priority',
             'actual_start_date', 'actual_end_date',
+            'dates_manual', 'tm_reviewer', 'tm_reviewer_name',
             'deleted_at', 'created_at',
             'depth', 'wbs_no',
             'children', 'assignees',
@@ -75,7 +79,20 @@ class TaskCreateSerializer(serializers.ModelSerializer):
             'order', 'start_date', 'end_date', 'estimated_hours',
             'status', 'progress', 'priority',
             'actual_start_date', 'actual_end_date',
+            'dates_manual', 'tm_reviewer',
         ]
+
+    def validate(self, attrs):
+        # 親が task（リーフ）の場合は子を持てない
+        parent = attrs.get('parent_task')
+        if parent is not None and parent.task_type == 'task':
+            raise serializers.ValidationError({
+                'parent_task': (
+                    'タスク（task）の下に子を作成できません。'
+                    '先に親項目（item）に変換してください。'
+                ),
+            })
+        return attrs
 
 
 class TaskUpdateSerializer(serializers.ModelSerializer):
@@ -88,7 +105,25 @@ class TaskUpdateSerializer(serializers.ModelSerializer):
             'order', 'start_date', 'end_date', 'estimated_hours',
             'status', 'progress', 'priority',
             'actual_start_date', 'actual_end_date',
+            'dates_manual', 'tm_reviewer',
         ]
+
+    def validate(self, attrs):
+        instance = self.instance
+        # task_type を 'task' に変更しようとしている場合、既に子がいたら拒否
+        new_type = attrs.get('task_type', getattr(instance, 'task_type', None))
+        if new_type == 'task' and instance is not None:
+            has_children = Task.objects.filter(
+                parent_task=instance, deleted_at__isnull=True,
+            ).exists()
+            if has_children:
+                raise serializers.ValidationError({
+                    'task_type': (
+                        '子タスクが存在するためタスク（task）に変更できません。'
+                        '先に子タスクを削除するか、親項目（item）のままにしてください。'
+                    ),
+                })
+        return attrs
 
 
 class TaskOrderSerializer(serializers.Serializer):

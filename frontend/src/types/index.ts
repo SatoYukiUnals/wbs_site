@@ -12,9 +12,6 @@ export type Priority = '高' | '中' | '低'
 /** レビューステータス */
 export type ReviewStatus = 'pending' | 'approved' | 'rejected' | '確認待ち' | '完了'
 
-/** ロードマップアイテムステータス */
-export type RoadmapStatus = '計画中' | '進行中' | '完了' | '保留'
-
 /** テンプレート種別 */
 export type TemplateType = 'wbs' | 'task'
 
@@ -25,7 +22,7 @@ export type ViewUnit = 'month' | 'week' | 'quarter'
 export type TaskType = 'item' | 'task'
 
 /** タスク作業種別 */
-export type TaskKind = '実装' | 'ドキュメント作成' | 'レビュー依頼' | 'レビュー修正'
+export type TaskKind = '実装' | 'TMRV' | 'PJRV' | 'レビュー修正'
 
 /** テナント */
 export interface Tenant {
@@ -49,6 +46,9 @@ export interface Project {
   description: string
   progress: number
   tenant_id: string
+  /** PJレビュー者（プロジェクト単位） */
+  pj_reviewer_id: string | null
+  pj_reviewer_name: string | null
 }
 
 /** プロジェクトメンバー */
@@ -95,10 +95,10 @@ export interface Task {
   assignees: { id: string; name: string }[]
   /** タスク作業種別（task のみ設定可） */
   task_kind: TaskKind | null
+  /** 開始日／終了日が手動入力されたかを示すフラグ */
+  dates_manual: boolean
   /** TMレビュー担当者（項目のみ） */
   tm_reviewer: { id: string; name: string } | null
-  /** PJレビュー担当者（項目のみ） */
-  pj_reviewer: { id: string; name: string } | null
   children?: Task[]
   depth: number
 }
@@ -135,17 +135,6 @@ export interface ReviewHistory {
   created_at: string
 }
 
-/** ロードマップアイテム */
-export interface RoadmapItem {
-  id: string
-  title: string
-  description: string
-  quarter_id: string
-  quarter_title: string
-  status: RoadmapStatus
-  project_id: string
-}
-
 /** 報告書セクション */
 export interface ReportSections {
   overview: string
@@ -167,12 +156,47 @@ export interface Template {
   created_by_name: string
 }
 
-/** 自動割り振りプレビュー結果 */
-export interface AutoAssignPreview {
+/** 自動割り振り（日付）の1行 */
+export interface AutoAssignScheduleRow {
   task_id: string
   task_title: string
-  assignee_id: string
-  assignee_name: string
+  wbs_no: string
+  task_kind: string
+  user_id: string | null
+  user_name: string
+  start_date: string | null
+  end_date: string | null
+  is_skipped: boolean
+  reason: string
+}
+
+/** 自動割り振りエラー（担当未割り当て等） */
+export interface AutoAssignError {
+  task_id: string
+  task_title: string
+  wbs_no: string
+  task_kind: string
+  detail: string
+}
+
+/** 自動割り振りプレビュー結果 */
+export interface AutoAssignPreview {
+  daily_hours: number
+  schedule: AutoAssignScheduleRow[]
+  errors: AutoAssignError[]
+}
+
+/** 稼働時間設定 */
+export interface WorkingHourSetting {
+  daily_hours: number
+}
+
+/** 有休日 */
+export interface UserPto {
+  id: string
+  user_id: string
+  user_name: string
+  date: string
 }
 
 /** ダッシュボード・プロジェクトサマリー */
